@@ -12,50 +12,93 @@ export default async function handler(req, res) {
     const { message } = req.body || {};
     if (!message) return res.status(400).json({ error: "Thiếu nội dung" });
 
-    const auth = Buffer.from(`${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`).toString("base64");
-    const sapoUrl = `https://${process.env.SAPO_STORE_ALIAS}.mysapo.net/admin/products.json?limit=250&fields=title,variants,alias`;
-    
-    const productRes = await fetch(sapoUrl, { headers: { Authorization: `Basic ${auth}` } });
-    const productData = await productRes.json();
-    const products = (productData.products || []).map(p => ({
-      ten: p.title,
-      gia: p.variants[0]?.price ? Number(p.variants[0].price).toLocaleString('vi-VN') + "đ" : "Liên hệ",
-      link: `https://lyuongruouvang.com/products/${p.alias}`
-    }));
+    // ================= SAPO API =================
+    const auth = Buffer.from(
+      `${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`
+    ).toString("base64");
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const shop = process.env.SAPO_STORE_ALIAS;
+
+    const sapoRes = await fetch(
+      `https://${shop}.mysapo.net/admin/products.json?limit=100`,
+      {
+        headers: { Authorization: `Basic ${auth}` }
+      }
+    );
+
+    const data = await sapoRes.json();
+
+    const products = (data.products || [])
+      .filter(p => p?.title)
+      .map(p => ({
+        name: p.title,
+        price: p.variants?.[0]?.price || 0,
+        url: `https://${shop}.mysapo.net/products/${p.alias}`
+      }));
+
+    // ================= OPENAI (MẠNH HƠN) =================
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.6, 
+      model: "gpt-4o",   // 🔥 NÂNG CẤP TỪ MINI -> 4o
+      temperature: 0.4,
+
       messages: [
         {
           role: "system",
           content: `
-Bạn là Duy - Chuyên gia tư vấn của RONA. Phong cách ngọt ngào, nịnh khách, am hiểu pha lê.
+Bạn là "Le Dzuy - AI bán hàng cao cấp RONA (Shopee AI style)".
 
-QUY TẮC CỰC KỲ QUAN TRỌNG (KHÔNG ĐƯỢC SAI):
-Mọi đường link sản phẩm BẮT BUỘC phải nằm trong thẻ HTML này:
-<a href="URL" target="_blank" rel="noopener noreferrer" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Tên sản phẩm</a>
+QUY TẮC TUYỆT ĐỐI:
+- KHÔNG dùng HTML <a>
+- KHÔNG markdown link
+- KHÔNG JSON lỗi
+- CHỈ trả text + danh sách sản phẩm
 
-LƯU Ý: 
-- target="_blank" là bắt buộc để mở tab mới.
-- Tư vấn: Ly to cho vang đỏ, ly nhỏ cho vang trắng. 
-- Khen ngợi gu thẩm mỹ của khách hàng để chốt đơn.
-- KHÔNG gửi ảnh, KHÔNG dùng Markdown.
+NHIỆM VỤ:
+1. Hiểu nhu cầu khách
+2. Chọn 1–5 sản phẩm phù hợp nhất
+3. Trả về theo format:
 
-DANH SÁCH: ${JSON.stringify(products)}`
+REPLY:
+...
+
+PRODUCTS:
+- name:
+- price:
+- url:
+
+PHONG CÁCH:
+- lịch sự
+- tư vấn như chuyên gia pha lê
+- gợi ý upsell nhẹ nhàng
+
+DANH SÁCH SẢN PHẨM:
+${JSON.stringify(products)}
+`
         },
-        { role: "user", content: message }
+        {
+          role: "user",
+          content: message
+        }
       ]
     });
 
-    return res.status(200).json({ reply: completion.choices[0].message.content });
+    const text = completion.choices[0].message.content;
+
+    // ================= PARSE PRODUCTS =================
+    const result = {
+      reply: text,
+      products: products.slice(0, 5)
+    };
+
+    return res.status(200).json(result);
 
   } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-}  } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({
+      error: err.message
+    });
   }
 }
