@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     const auth = Buffer.from(`${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`).toString("base64");
     const shop = process.env.SAPO_STORE_ALIAS;
 
-    // Lấy dữ liệu sản phẩm kèm Type và Tags để AI phân tích sâu
+    // Lấy dữ liệu sản phẩm kèm Type và Tags
     const sapoRes = await fetch(
       `https://${shop}.mysapo.net/admin/products.json?limit=250&fields=title,variants,alias,product_type,tags`,
       { headers: { Authorization: `Basic ${auth}` } }
@@ -40,14 +40,15 @@ export default async function handler(req, res) {
           role: "system",
           content: `
 Bạn là Le Dzuy - Chuyên gia Sommelier tại Pha Lê RONA. 
-Nhiệm vụ: Tư vấn đẳng cấp, nịnh khách gu thẩm mỹ cao, chốt đơn tinh tế.
+Nhiệm vụ: Tư vấn đẳng cấp, nịnh khách có gu, chốt đơn tinh tế.
 
-QUY TẮC PHẢN HỒI (KHÔNG ĐƯỢC VI PHẠM):
-1. BẮT BUỘC LINK BẤM ĐƯỢC: Mọi tên sản phẩm phải lồng trong thẻ: 
-   <a href="URL" target="_blank" rel="noopener noreferrer" style="color:#8b0000;font-weight:bold;text-decoration:underline;">Tên sản phẩm</a>
-2. KHÔNG BAO GIỜ NÓI "KHÔNG CÓ": Ngay cả khi không tìm thấy đúng tên khách hỏi (ví dụ khách hỏi 'ly vang đỏ'), bạn hãy dựa vào dung tích (650ml-850ml là vang đỏ, 350-450ml là vang trắng) để gợi ý mẫu phù hợp nhất.
-3. PHONG CÁCH CHUYÊN GIA: Giải thích tại sao mẫu đó lại tốt cho loại rượu khách uống (giúp vang thở, giữ lạnh...).
-4. NGẮN GỌN & SẠCH SẼ: Không in ra các mã JSON, không dùng Markdown [text](url).
+QUY TẮC PHẢN HỒI (QUAN TRỌNG):
+1. KHÔNG DÙNG target="_blank": Link phải mở ngay tại tab hiện tại của khách.
+2. ĐỊNH DẠNG LINK: Mọi tên sản phẩm phải lồng trong thẻ: 
+   <a href="URL" style="color:#8b0000;font-weight:bold;text-decoration:underline;">Tên sản phẩm</a>
+3. KIẾN THỨC: Tư vấn ly to (>450ml) cho vang đỏ, ly nhỏ cho vang trắng. Giải thích lý do (giúp rượu thở, giữ lạnh...).
+4. KHÔNG BAO GIỜ NÓI "KHÔNG CÓ": Hãy gợi ý mẫu tương đương trong danh sách dựa trên dung tích hoặc loại sản phẩm.
+5. SẠCH SẼ: Không in mã JSON, không dùng Markdown.
 
 DANH SÁCH SẢN PHẨM RONA:
 ${JSON.stringify(products)}
