@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-// Bộ nhớ tạm để lưu số liệu trong ngày
+// Bộ nhớ tạm trong ngày
 let stats = {
   totalVisits: 0,
   uniqueIPs: new Set(),
@@ -23,7 +23,6 @@ export default async function handler(req, res) {
     stats.totalVisits++;
     if (ip && ip !== "Không xác định") stats.uniqueIPs.add(ip);
     
-    // Lưu câu hỏi khách (loại trừ mật mã của Duy)
     if (message && message !== "Duy_Check_68") {
         stats.recentQuestions.push({ 
           q: message, 
@@ -35,25 +34,24 @@ export default async function handler(req, res) {
 
     // --- KIỂM TRA MẬT MÃ ADMIN ---
     if (message === "Duy_Check_68") {
-      // Lấy thông tin vị trí từ IP (Dùng dịch vụ miễn phí của ip-api)
-      let locationInfo = "Đang xác định...";
+      let locationInfo = "Không rõ vị trí";
       try {
-        const locRes = await fetch(`http://ip-api.com/json/${ip}?fields=city,regionName`);
+        // Dùng API hỗ trợ HTTPS để không bị chặn
+        const locRes = await fetch(`https://ipapi.co/${ip}/json/`);
         const locData = await locRes.json();
-        if(locData.city) locationInfo = `${locData.city}, ${locData.regionName}`;
-      } catch (e) { locationInfo = "Chưa rõ vị trí"; }
+        if(locData.city) locationInfo = `${locData.city}, ${locData.region}`;
+      } catch (e) { console.log("Lỗi lấy vị trí"); }
 
       const questionList = stats.recentQuestions.map(item => `• [${item.time}] ${item.q}\n  └ Tại: ${item.page}`).join("\n\n");
 
       return res.status(200).json({ 
-        reply: `📊 **BÁO CÁO QUẢN TRỊ RONA** 📊\n\n` +
-               `🔹 **Tổng lượt chat:** ${stats.totalVisits}\n` +
-               `🔹 **Khách (IP) duy nhất:** ${stats.uniqueIPs.size}\n` +
-               `📍 **Vị trí của Duy:** ${locationInfo}\n` +
-               `🌐 **IP hiện tại:** ${ip}\n\n` +
-               `❓ **CÂU HỎI GẦN ĐÂY:**\n${questionList || "_Đang chờ khách đầu tiên..._"}\n\n` +
+        reply: `📊 **BÁO CÁO ADMIN RONA** 📊\n\n` +
+               `🔹 **Lượt chat:** ${stats.totalVisits}\n` +
+               `🔹 **Khách (IP):** ${stats.uniqueIPs.size}\n` +
+               `📍 **Vị trí khách:** ${locationInfo}\n\n` +
+               `❓ **CÂU HỎI GẦN ĐÂY:**\n${questionList || "_Chưa có khách hỏi._"}\n\n` +
                `---------------------------\n` +
-               `💡 *Dữ liệu sẽ reset khi hệ thống tạm nghỉ.*`
+               `💡 *Dữ liệu sẽ reset khi Vercel nghỉ ngơi.*`
       });
     }
 
@@ -73,4 +71,24 @@ export default async function handler(req, res) {
       url: `https://lyuongruouvang.com/products/${p.alias}`
     }));
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o", 
+      temperature: 0.6, 
+      messages: [
+        {
+          role: "system",
+          content: `Bạn là Le Dzuy - Sommelier tại RONA. Tư vấn nịnh khách, link không dùng target_blank. Danh sách sản phẩm: ${JSON.stringify(products)}`
+        },
+        { role: "user", content: `(Khách xem: ${context}) - Hỏi: ${message}` }
+      ]
+    });
+
+    return res.status(200).json({ reply: completion.choices[0].message.content });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(200).json({ reply: "Dạ Duy đang bận tí, mình nhắn lại giúp Duy nhé!" });
+  }
+}
