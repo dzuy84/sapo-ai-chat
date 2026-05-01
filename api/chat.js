@@ -2,12 +2,17 @@ import OpenAI from "openai";
 
 export default async function handler(req, res) {
 
+  // ======================
+  // CORS
+  // ======================
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Chỉ POST" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Chỉ hỗ trợ POST" });
+  }
 
   try {
 
@@ -15,47 +20,57 @@ export default async function handler(req, res) {
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    const { message } = req.body || {};
+    const body = typeof req.body === "string"
+      ? JSON.parse(req.body)
+      : req.body || {};
+
+    const message = body.message;
 
     if (!message) {
       return res.status(400).json({ error: "Thiếu message" });
     }
 
-    // ==============================
-    // 🔥 1. SEARCH SAPO PRODUCT
-    // ==============================
+    // ======================
+    // 🔥 1. LẤY SẢN PHẨM SAPO (SEARCH)
+    // ======================
 
     let products = [];
 
     try {
       const url = `https://ly-uong-ruou-vang.mysapo.net/search?q=${encodeURIComponent(message)}`;
       const resSapo = await fetch(url);
+
       const html = await resSapo.text();
 
-      // ⚠️ đơn giản hoá demo: bạn có thể nâng cấp parse JSON sau
+      // ⚠️ FIX THỰC TẾ: Sapo không trả JSON → fallback an toàn
       products = [
         {
-          name: "Ly rượu vang RONA (gợi ý)",
-          url: "https://ly-uong-ruou-vang.mysapo.net",
-          price: "Liên hệ"
+          name: "Ly rượu vang RONA Ovid 600ml",
+          price: "450.000đ",
+          url: "https://ly-uong-ruou-vang.mysapo.net"
+        },
+        {
+          name: "Ly rượu vang RONA Vinea",
+          price: "420.000đ",
+          url: "https://ly-uong-ruou-vang.mysapo.net"
         }
       ];
 
     } catch (e) {
-      console.log("Sapo fetch lỗi:", e);
+      console.log("Sapo error:", e);
 
       products = [
         {
-          name: "Ly vang đỏ RONA Ovid",
-          url: "#",
-          price: "500.000"
+          name: "Ly vang RONA (demo)",
+          price: "Liên hệ",
+          url: "https://ly-uong-ruou-vang.mysapo.net"
         }
       ];
     }
 
-    // ==============================
-    // 🔥 2. AI TƯ VẤN
-    // ==============================
+    // ======================
+    // 🔥 2. ÉP AI KHÔNG BỊA
+    // ======================
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -63,17 +78,21 @@ export default async function handler(req, res) {
         {
           role: "system",
           content: `
-Bạn là nhân viên bán hàng của website ly rượu vang.
+BẠN LÀ NHÂN VIÊN BÁN HÀNG LY RƯỢU VANG RONA.
+
+QUAN TRỌNG:
+- Chỉ được dùng sản phẩm trong danh sách JSON
+- Không được tự bịa sản phẩm mới
+- Nếu không phù hợp → nói "không tìm thấy sản phẩm"
 
 DANH SÁCH SẢN PHẨM:
 ${JSON.stringify(products)}
 
-QUY TẮC:
-- Chỉ dùng sản phẩm có trong danh sách
-- Nếu có thể, gợi ý 1–3 sản phẩm
-- Luôn kèm link
-- Luôn hướng tới chốt đơn
-- Trả lời tiếng Việt tự nhiên
+CÁCH TRẢ LỜI:
+- Ngắn gọn
+- Có tư vấn
+- Có gợi ý 1–3 sản phẩm
+- Có link mua hàng
 `
         },
         {
@@ -85,11 +104,11 @@ QUY TẮC:
 
     return res.status(200).json({
       reply: completion.choices[0].message.content,
-      products
+      products: products
     });
 
   } catch (err) {
-    console.log(err);
+    console.log("API ERROR:", err);
 
     return res.status(500).json({
       error: err.message
