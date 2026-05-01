@@ -15,7 +15,6 @@ export default async function handler(req, res) {
     const auth = Buffer.from(`${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`).toString("base64");
     const shop = process.env.SAPO_STORE_ALIAS;
 
-    // Lấy tối đa sản phẩm để bao quát toàn bộ danh mục
     const sapoRes = await fetch(
       `https://${shop}.mysapo.net/admin/products.json?limit=250&fields=title,variants,alias,product_type`,
       { headers: { Authorization: `Basic ${auth}` } }
@@ -26,7 +25,7 @@ export default async function handler(req, res) {
       .filter(p => p?.title && p?.variants?.length)
       .map(p => ({
         ten: p.title,
-        loai: p.product_type, // Thêm loại sản phẩm để AI phân biệt danh mục
+        loai: p.product_type,
         gia: p.variants?.[0]?.price ? Number(p.variants[0].price).toLocaleString("vi-VN") + "đ" : "Liên hệ",
         link: `https://lyuongruouvang.com/products/${p.alias}`
       }));
@@ -35,26 +34,23 @@ export default async function handler(req, res) {
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.5, // Giảm xuống 0.5 để trả lời chính xác, không lan man
+      temperature: 0.6,
       messages: [
         {
           role: "system",
           content: `
-Bạn là Le Dzuy - chuyên gia tư vấn tại RONA. Bạn nắm rõ toàn bộ danh mục sản phẩm sau:
-- Ly rượu vang (Đỏ/Trắng/Champagne)
-- Ly Brandy / Cognac / Whisky
-- Ly Shot / Rượu mạnh
-- Bình chiết vang (Decanter)
-- Bộ bình rượu & Cốc Pha Lê
-- Bình bông (Lọ hoa) & Tô thố pha lê
-- Phụ kiện rượu vang
+Bạn là Le Dzuy - chuyên gia tư vấn tại RONA. 
+Nhiệm vụ: Tư vấn sản phẩm và nịnh khách.
 
-QUY TẮC TƯ VẤN:
-1. ĐÚNG TRỌNG TÂM: Khách hỏi danh mục nào, CHỈ tập trung tư vấn sản phẩm thuộc danh mục đó. KHÔNG trả lời lan man sang loại khác trừ khi khách yêu cầu.
-2. NỊNH KHÁCH: Khen ngợi gu thẩm mỹ tinh tế của khách hàng.
-3. CẤU TRÚC LINK (BẮT BUỘC): Mọi sản phẩm phải dùng thẻ: 
-   <a href="URL" target="_blank" rel="noopener noreferrer" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Tên sản phẩm</a>
-4. Nếu không thấy sản phẩm khách cần, hãy lịch sự báo shop sẽ sớm cập nhật hoặc đề xuất mẫu gần nhất.
+QUY TẮC SUY LUẬN SẢN PHẨM (QUAN TRỌNG):
+1. LY VANG ĐỎ: Nếu khách hỏi "ly vang đỏ", hãy gợi ý các mẫu ly có dung tích từ 450ml đến 850ml (ví dụ các mẫu 450ml, 560ml, 650ml).
+2. LY VANG TRẮNG: Gợi ý các mẫu dung tích nhỏ hơn 400ml.
+3. LY CHAMPAGNE: Gợi ý các mẫu có dung tích 150ml - 250ml hoặc dáng cao (Flute).
+4. BÌNH CHIẾT: Gợi ý các mẫu Decanter cho khách hỏi về vang đỏ.
+5. LUÔN TRẢ LỜI: Ngay cả khi tên sản phẩm không có chữ "đỏ", bạn hãy dùng kiến thức trên để tư vấn mẫu phù hợp nhất. KHÔNG ĐƯỢC trả lời là "không có sản phẩm".
+
+ĐỊNH DẠNG LINK (BẮT BUỘC):
+<a href="URL" target="_blank" rel="noopener noreferrer" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Tên sản phẩm</a>
 
 DANH SÁCH SẢN PHẨM:
 ${JSON.stringify(products)}
