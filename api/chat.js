@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import nodemailer from "nodemailer";
 
-// Bộ nhớ tạm để gom dữ liệu
+// Bộ nhớ tạm để gom dữ liệu trong ngày
 let stats = { totalVisits: 0, uniqueIPs: new Set(), recentQuestions: [], lastEmailSentDay: null };
 
 export default async function handler(req, res) {
@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     const now = new Date();
     const today = now.toLocaleDateString('vi-VN');
 
-    // 1. GHI CHÉP DỮ LIỆU (Chỉ ghi vào bộ nhớ, chưa gửi mail)
+    // 1. GHI CHÉP DỮ LIỆU
     if (message && message !== "Duy_Check_68") {
       stats.totalVisits++;
       if (ip) stats.uniqueIPs.add(ip);
@@ -24,58 +24,49 @@ export default async function handler(req, res) {
         time: now.toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}), 
         page: context || "Trang chủ" 
       });
+      // Giữ tối đa 50 câu hỏi gần nhất để không nặng máy chủ
       if (stats.recentQuestions.length > 50) stats.recentQuestions.shift();
     }
 
-    // 2. LOGIC GỬI MAIL TỔNG KẾT (CHỈ GỬI 1 LẦN SAU 22H)
+    // 2. LOGIC GỬI MAIL TỔNG KẾT (CHỈ GỬI 1 LẦN DUY NHẤT SAU 22H)
     const currentHour = now.getHours();
     if (currentHour >= 22 && stats.lastEmailSentDay !== today && stats.recentQuestions.length > 0) {
-      // Đánh dấu đã gửi ngay lập tức để các tin nhắn sau không gửi trùng
-      stats.lastEmailSentDay = today; 
-      
-      // Gửi mail chạy ngầm
+      stats.lastEmailSentDay = today; // Đánh dấu đã gửi để các tin nhắn sau không gửi nữa
       sendReportEmail(stats).catch(e => {
-          console.error("Lỗi gửi mail:", e);
-          stats.lastEmailSentDay = null; // Nếu lỗi thì cho phép gửi lại sau
+        console.log("Lỗi mail:", e);
+        stats.lastEmailSentDay = null; // Nếu lỗi thì cho phép gửi lại sau
       });
     }
 
     // 3. MẬT MÃ ADMIN XEM NHANH
     if (message === "Duy_Check_68") {
       return res.status(200).json({ 
-        reply: `📊 **QUẢN TRỊ RONA**\n\n🔹 Hôm nay có ${stats.uniqueIPs.size} khách.\n🔹 Tổng ${stats.recentQuestions.length} câu hỏi.\n📧 Báo cáo tổng kết sẽ gửi vào Gmail sau 22h đêm!` 
+        reply: `📊 **ADMIN RONA**\n\n🔹 Khách hôm nay: ${stats.uniqueIPs.size}\n🔹 Tổng câu hỏi: ${stats.recentQuestions.length}\n📧 Báo cáo tổng kết sẽ gửi vào Gmail sau 22h đêm!` 
       });
     }
 
-    // 4. LẤY DỮ LIỆU SAPO VÀ TRẢ LỜI KHÁCH (Như cũ)
-    const auth = Buffer.from(`${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`).toString("base64");
-    const sapoRes = await fetch(`https://${process.env.SAPO_STORE_ALIAS}.mysapo.net/admin/products.json?limit=250&fields=title,variants,alias`, { headers: { Authorization: `Basic ${auth}` } });
-    const data = await sapoRes.json();
-    const products = (data.products || []).map(p => ({ 
-      name: p.title, 
-      price: p.variants?.[0]?.price || "Liên hệ", 
-      url: `https://lyuongruouvang.com/products/${p.alias}` 
-    }));
-
+    // 4. AI TRẢ LỜI KHÁCH (DÙNG KIẾN THỨC CHUẨN)
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
-      temperature: 0.4,
+      temperature: 0.5,
       messages: [
         {
           role: "system",
-          content: `Bạn là Le Dzuy - Sommelier tại RONA. Tư vấn đẳng cấp pha lê Bohemia. 
-          Link Zalo: <a href="https://zalo.me/0963111234" style="color:#0068ff;font-weight:bold;">Chat Zalo với Duy</a>.
-          DANH SÁCH: ${JSON.stringify(products.slice(0, 60))}`
+          content: `Bạn là Le Dzuy - Sommelier tại RONA. 
+          - Tư vấn đẳng cấp về pha lê Bohemia Tiệp Khắc và vang cao cấp.
+          - Luôn nịnh khách, trả lời lịch sự, chuyên nghiệp.
+          - Nếu khách hỏi mua hoặc cần tư vấn kỹ hơn, đưa link Zalo: <a href="https://zalo.me/0963111234" style="color:#0068ff;font-weight:bold;">Chat Zalo với Duy</a>.`
         },
-        { role: "user", content: message }
+        { role: "user", content: `Khách hỏi: ${message}` }
       ]
     });
 
     return res.status(200).json({ reply: completion.choices[0].message.content });
 
   } catch (err) {
-    return res.status(200).json({ reply: "Duy bận tí, nhắn lại giúp Duy nhé!" });
+    console.error("Lỗi:", err);
+    return res.status(200).json({ reply: "Duy bận tí, mình nhắn lại giúp Duy nhé!" });
   }
 }
 
@@ -86,16 +77,19 @@ async function sendReportEmail(data) {
     auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
   });
 
-  const listHtml = data.recentQuestions.map(i => `<li><b>[${i.time}]</b>: ${i.q}</li>`).join("");
+  const listHtml = data.recentQuestions.map(i => `<li style="margin-bottom:5px;"><b>[${i.time}]</b>: ${i.q}</li>`).join("");
 
   return transporter.sendMail({
     from: `"Trợ Lý RONA" <${process.env.EMAIL_USER}>`,
     to: process.env.EMAIL_USER,
     subject: `[TỔNG KẾT RONA] Ngày ${new Date().toLocaleDateString('vi-VN')}`,
-    html: `<h2>Báo cáo tổng kết ngày hôm nay</h2>
-           <p>🔹 Số khách truy cập: ${data.uniqueIPs.size}</p>
-           <p>🔹 Tổng số câu hỏi: ${data.recentQuestions.length}</p>
-           <hr>
-           <ul>${listHtml}</ul>`
+    html: `<div style="font-family:sans-serif;border:1px solid #8b0000;padding:20px;border-radius:10px;">
+             <h2 style="color:#8b0000;">Báo cáo tổng kết ngày</h2>
+             <p>🔹 Số khách truy cập: <b>${data.uniqueIPs.size}</b></p>
+             <p>🔹 Tổng số câu hỏi: <b>${data.recentQuestions.length}</b></p>
+             <hr>
+             <h4>Chi tiết các câu hỏi:</h4>
+             <ul>${listHtml || "Không có dữ liệu"}</ul>
+           </div>`
   });
 }
