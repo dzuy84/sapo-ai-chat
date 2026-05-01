@@ -6,12 +6,11 @@ const openai = new OpenAI({
 
 export default async function handler(req, res) {
 
-  // ===== CORS CHUẨN =====
+  // ===== CORS =====
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-  // xử lý preflight
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
@@ -21,7 +20,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { message } = req.body || {};
+
+    // ⚠️ FIX AN TOÀN req.body
+    const body = typeof req.body === "string"
+      ? JSON.parse(req.body)
+      : req.body || {};
+
+    const message = body.message;
 
     if (!message) {
       return res.status(400).json({ error: "Thiếu message" });
@@ -29,7 +34,16 @@ export default async function handler(req, res) {
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "user", content: message }]
+      messages: [
+        {
+          role: "system",
+          content: "Bạn là trợ lý bán hàng ly rượu vang cao cấp RONA tại Việt Nam."
+        },
+        {
+          role: "user",
+          content: message
+        }
+      ]
     });
 
     return res.status(200).json({
@@ -37,6 +51,8 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
+    console.log("API ERROR:", err);
+
     return res.status(500).json({
       error: err.message
     });
