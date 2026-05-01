@@ -14,6 +14,7 @@ export default async function handler(req, res) {
     const { message } = req.body || {};
     if (!message) return res.status(400).json({ error: "Thiếu nội dung" });
 
+    // ================= SAPO AUTH =================
     const auth = Buffer.from(
       `${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`
     ).toString("base64");
@@ -29,9 +30,9 @@ export default async function handler(req, res) {
 
     const data = await sapoRes.json();
 
-    // ===== FIX NULL + LỌC RÁC =====
+    // ================= FIX DATA =================
     const products = (data.products || [])
-      .filter(p => p && p.title && p.variants?.length)
+      .filter(p => p?.title && p?.variants?.length)
       .map(p => ({
         ten: p.title,
         gia: p.variants?.[0]?.price
@@ -41,6 +42,7 @@ export default async function handler(req, res) {
         link: `https://${shop}.mysapo.net/products/${p.alias}`
       }));
 
+    // ================= OPENAI =================
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
@@ -48,23 +50,33 @@ export default async function handler(req, res) {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.5,
+
       messages: [
         {
           role: "system",
           content: `
-Bạn là Le Dzuy - chuyên gia ly rượu vang RONA.
+Bạn là Le Dzuy - chuyên gia tư vấn ly rượu vang RONA.
 
-QUY TẮC:
-- Không HTML
-- Không markdown link
-- Chỉ dùng sản phẩm trong danh sách
-- Trả lời ngắn gọn, sang trọng
+QUY TẮC BẮT BUỘC:
+- KHÔNG dùng HTML
+- KHÔNG dùng <a>
+- KHÔNG markdown link
+- CHỈ dùng dữ liệu sản phẩm trong danh sách
+- Trả lời ngắn gọn, tư vấn sang trọng, chốt đơn nhẹ nhàng
 
-DANH SÁCH:
+HƯỚNG DẪN:
+- Ly vang đỏ: ly lớn
+- Ly vang trắng: ly nhỏ
+- Luôn gợi ý 1-3 sản phẩm phù hợp
+
+DANH SÁCH SẢN PHẨM:
 ${JSON.stringify(products)}
 `
         },
-        { role: "user", content: message }
+        {
+          role: "user",
+          content: message
+        }
       ]
     });
 
@@ -74,6 +86,8 @@ ${JSON.stringify(products)}
     });
 
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({
+      error: err.message
+    });
   }
 }
