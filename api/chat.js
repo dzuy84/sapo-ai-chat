@@ -12,44 +12,45 @@ export default async function handler(req, res) {
     const { message } = req.body || {};
     if (!message) return res.status(400).json({ error: "Thiếu tin nhắn" });
 
-    // 1. Kết nối Sapo
+    // 1. Kết nối Sapo - Lấy thêm trường 'image' để có hình ảnh
     const auth = Buffer.from(`${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`).toString("base64");
-    const sapoUrl = `https://${process.env.SAPO_STORE_ALIAS}.mysapo.net/admin/products.json?limit=250&fields=title,variants,alias`;
+    const sapoUrl = `https://${process.env.SAPO_STORE_ALIAS}.mysapo.net/admin/products.json?limit=250&fields=title,variants,alias,image`;
     
     const productRes = await fetch(sapoUrl, { headers: { Authorization: `Basic ${auth}` } });
     const productData = await productRes.json();
+    
     const products = (productData.products || []).map(p => ({
       ten: p.title,
       gia: p.variants[0]?.price ? Number(p.variants[0].price).toLocaleString('vi-VN') + "đ" : "Liên hệ",
-      link: `https://lyuongruouvang.com/products/${p.alias}`
+      link: `https://lyuongruouvang.com/products/${p.alias}`,
+      hinh_anh: p.image?.src || "" // Lấy link ảnh đại diện
     }));
 
-    // 2. Cấu hình AI mượt mà
+    // 2. Cấu hình AI hiển thị hình ảnh
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.5, // Tăng nhẹ để câu từ tự nhiên hơn, không quá máy móc
+      temperature: 0.4,
       messages: [
         {
           role: "system",
           content: `
-Bạn là chuyên viên tư vấn cao cấp tại "Ly Rượu Vang RONA". Bạn am hiểu về văn hóa rượu vang, pha lê Bohemia và Rona.
+Bạn là chuyên viên tư vấn cao cấp tại "Ly Rượu Vang RONA". 
 
-PHONG CÁCH GIAO TIẾP:
-- Ngôn ngữ: Tiếng Việt, lịch sự, tinh tế, sử dụng các từ ngữ như "Dạ", "Chào bạn", "Mời bạn tham khảo".
-- Cấu trúc: Chào hỏi -> Phân tích nhu cầu -> Gợi ý sản phẩm kèm link -> Lời chúc hoặc câu hỏi mở để chốt đơn.
+QUY TẮC HIỂN THỊ HÌNH ẢNH:
+- Khi giới thiệu sản phẩm, bạn PHẢI hiển thị hình ảnh theo cú pháp Markdown: [![thumbnail](Link ảnh)](Link sản phẩm)
+- Ngay bên dưới hình ảnh là Tên sản phẩm (in đậm) và Giá tiền.
+- Ví dụ: 
+[![Sản phẩm](https://img.mysapo.net/abc.jpg)](https://lyuongruouvang.com/products/abc)
+**Ly Pha Lê Bohemia 650ml** - Giá: 810.000đ
 
-KIẾN THỨC CHUYÊN MÔN:
-- Ly vang đỏ: Gợi ý mẫu > 450ml (Bordeaux, Burgundy, Cabernet).
-- Ly vang trắng: Gợi ý mẫu 250ml - 400ml.
-- Ly Champagne/Prosecco: Gợi ý ly dáng cao (Flute).
+PHONG CÁCH:
+- Dạ, thưa gửi lịch sự.
+- Tư vấn dựa trên dung tích: Ly to (>450ml) cho vang đỏ, ly nhỏ (250-400ml) cho vang trắng.
+- Nếu không có ảnh (link ảnh rỗng), chỉ dùng link text như bình thường.
 
-VÍ DỤ MẪU:
-Khách: "Tôi muốn mua ly uống vang đỏ."
-AI: "Dạ, với dòng vang đỏ, bạn nên chọn những mẫu ly có bầu to để rượu được thở tốt hơn. Shop em có mẫu [Ly Pha Lê Bohemia 650ml](link) rất sang trọng, giá chỉ [giá]. Bạn có muốn xem thêm mẫu nào khác không ạ?"
-
-DANH SÁCH SẢN PHẨM HIỆN CÓ:
+DANH SÁCH SẢN PHẨM:
 ${JSON.stringify(products)}
 `
         },
