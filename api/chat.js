@@ -7,92 +7,39 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Chỉ hỗ trợ POST" });
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Chỉ POST" });
 
   try {
 
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-
-    const body = typeof req.body === "string"
-      ? JSON.parse(req.body)
-      : req.body || {};
-
-    const message = body.message;
-
+    const { message } = req.body || {};
     if (!message) {
       return res.status(400).json({ error: "Thiếu message" });
     }
 
-    // ================= 1. TRÍCH KEYWORD =================
-    const keywordRes = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `
-Trích keyword sản phẩm từ câu người dùng.
+    // ================= SAPO AUTH =================
+    const auth = Buffer.from(
+      `${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`
+    ).toString("base64");
 
-QUY TẮC:
-- chỉ 2–5 từ
-- không giải thích
-
-Ví dụ:
-"có ly vang đỏ không" → ly vang đỏ
-"ly 600ml" → ly 600ml
-"ly quà tặng" → ly quà tặng
-`
-        },
-        {
-          role: "user",
-          content: message
+    // ================= GET PRODUCTS =================
+    const productRes = await fetch(
+      "https://lyuongruouvang.com/admin/products.json",
+      {
+        headers: {
+          Authorization: `Basic ${auth}`
         }
-      ]
+      }
+    );
+
+    const productData = await productRes.json();
+    const products = productData.products || [];
+
+    // ================= OPENAI =================
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
     });
 
-    const keyword = keywordRes.choices[0].message.content.trim();
-
-    // ================= 2. SAPO SEARCH (DOMAIN CHÍNH) =================
-    const searchUrl =
-      `https://lyuongruouvang.com/search?q=${encodeURIComponent(keyword)}`;
-
-    let products = [];
-
-    try {
-      const html = await (await fetch(searchUrl)).text();
-
-      // ================= PARSE PRODUCT =================
-      const regex = /href="(\/products\/.*?)".*?title="(.*?)"/g;
-
-      const matches = [...html.matchAll(regex)];
-
-      products = matches.slice(0, 5).map(m => ({
-        name: m[2],
-        url: `https://lyuongruouvang.com${m[1]}`,
-        price: "xem trên web"
-      }));
-
-    } catch (err) {
-      console.log("SEARCH ERROR:", err);
-      products = [];
-    }
-
-    // ================= 3. FORMAT PRODUCT =================
-    const productText =
-      products.length > 0
-        ? products.map(p =>
-            `- ${p.name} | ${p.price} | ${p.url}`
-          ).join("\n")
-        : "KHÔNG TÌM THẤY SẢN PHẨM PHÙ HỢP";
-
-    // ================= 4. OPENAI CHAT =================
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.2,
@@ -105,12 +52,11 @@ Bạn là nhân viên bán hàng ly rượu vang RONA.
 QUY TẮC:
 - CHỈ dùng sản phẩm trong danh sách
 - KHÔNG bịa sản phẩm
-- KHÔNG tự tạo sản phẩm
 - Nếu không có → nói không tìm thấy
-- Trả lời ngắn gọn, tư vấn bán hàng
+- Tư vấn ngắn gọn, chốt đơn
 
 DANH SÁCH SẢN PHẨM:
-${productText}
+${JSON.stringify(products)}
 `
         },
         {
@@ -120,10 +66,8 @@ ${productText}
       ]
     });
 
-    // ================= RESPONSE =================
     return res.status(200).json({
       reply: completion.choices[0].message.content,
-      keyword,
       products
     });
 
