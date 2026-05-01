@@ -1,15 +1,11 @@
 import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export default async function handler(req, res) {
 
   // ===== CORS =====
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -21,11 +17,11 @@ export default async function handler(req, res) {
 
   try {
 
-    // ⚠️ FIX AN TOÀN req.body
-    const body = typeof req.body === "string"
-      ? JSON.parse(req.body)
-      : req.body || {};
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
 
+    const body = req.body || {};
     const message = body.message;
 
     if (!message) {
@@ -37,13 +33,24 @@ export default async function handler(req, res) {
       messages: [
         {
           role: "system",
-          content: "Bạn là trợ lý bán hàng ly rượu vang cao cấp RONA tại Việt Nam."
+          content: `
+Bạn là nhân viên tư vấn bán hàng chuyên nghiệp cho website ly rượu vang RONA tại Việt Nam.
+
+Nhiệm vụ:
+- Trả lời bằng tiếng Việt
+- Ngắn gọn, dễ hiểu
+- Tư vấn đúng sản phẩm ly rượu vang
+- Gợi ý mua hàng nhẹ nhàng
+- Luôn có hướng chốt đơn tự nhiên (ví dụ: "Bạn muốn mình tư vấn mẫu phù hợp không?")
+- Không nói dài dòng
+`
         },
         {
           role: "user",
           content: message
         }
-      ]
+      ],
+      temperature: 0.7
     });
 
     return res.status(200).json({
@@ -51,10 +58,10 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.log("API ERROR:", err);
+    console.log("OPENAI ERROR:", err);
 
     return res.status(500).json({
-      error: err.message
+      error: "Server error: " + err.message
     });
   }
 }
