@@ -17,12 +17,10 @@ export default async function handler(req, res) {
 
   try {
 
-    // ================= OPENAI =================
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    // ================= BODY FIX =================
     const body = typeof req.body === "string"
       ? JSON.parse(req.body)
       : req.body || {};
@@ -33,9 +31,38 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Thiếu message" });
     }
 
-    // ================= SAPO SEARCH (QUAN TRỌNG NHẤT) =================
+    // ================= 1. TRÍCH KEYWORD (QUAN TRỌNG) =================
+    const keywordRes = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `
+Bạn là hệ thống trích xuất keyword sản phẩm.
+
+QUY TẮC:
+- Chỉ trả về keyword sản phẩm
+- Không giải thích
+- 2-5 từ là tối đa
+
+Ví dụ:
+"có ly vang đỏ không" → ly vang đỏ
+"tôi muốn ly 600ml" → ly 600ml
+"ly quà tặng cao cấp" → ly quà tặng
+`
+        },
+        {
+          role: "user",
+          content: message
+        }
+      ]
+    });
+
+    const keyword = keywordRes.choices[0].message.content.trim();
+
+    // ================= 2. SAPO SEARCH =================
     const searchUrl =
-      `https://ly-uong-ruou-vang.mysapo.net/search/suggest.json?q=${encodeURIComponent(message)}`;
+      `https://ly-uong-ruou-vang.mysapo.net/search/suggest.json?q=${encodeURIComponent(keyword)}`;
 
     let products = [];
 
@@ -56,7 +83,7 @@ export default async function handler(req, res) {
       products = [];
     }
 
-    // ================= FORMAT PRODUCTS =================
+    // ================= 3. FORMAT PRODUCTS =================
     const productText =
       products.length > 0
         ? products.map(p =>
@@ -64,7 +91,7 @@ export default async function handler(req, res) {
           ).join("\n")
         : "KHÔNG TÌM THẤY SẢN PHẨM PHÙ HỢP";
 
-    // ================= OPENAI CHAT =================
+    // ================= 4. OPENAI CHAT =================
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.2,
@@ -74,12 +101,12 @@ export default async function handler(req, res) {
           content: `
 Bạn là nhân viên bán hàng ly rượu vang RONA.
 
-QUY TẮC BẮT BUỘC:
+QUY TẮC:
 - CHỈ dùng sản phẩm trong danh sách
-- KHÔNG tự bịa sản phẩm
-- KHÔNG được thêm sản phẩm ngoài danh sách
-- Nếu không có sản phẩm → nói "không tìm thấy sản phẩm phù hợp"
-- Luôn tư vấn ngắn gọn, dễ hiểu, hướng tới chốt đơn
+- KHÔNG bịa sản phẩm
+- KHÔNG tự thêm sản phẩm
+- Nếu không có → nói không tìm thấy
+- Trả lời ngắn gọn, tư vấn bán hàng
 
 DANH SÁCH SẢN PHẨM:
 ${productText}
@@ -95,6 +122,7 @@ ${productText}
     // ================= RESPONSE =================
     return res.status(200).json({
       reply: completion.choices[0].message.content,
+      keyword,
       products
     });
 
