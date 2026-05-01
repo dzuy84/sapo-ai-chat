@@ -17,12 +17,12 @@ export default async function handler(req, res) {
 
   try {
 
-    // ================= INIT OPENAI =================
+    // ================= OPENAI =================
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    // ================= FIX BODY =================
+    // ================= SAFE BODY =================
     const body = typeof req.body === "string"
       ? JSON.parse(req.body)
       : req.body || {};
@@ -33,16 +33,37 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Thiếu message" });
     }
 
-    // ================= 1. GET SAPO PRODUCTS =================
+    // ================= SEARCH SAPO (SMART) =================
     let products = [];
 
     try {
-      const url = `https://ly-uong-ruou-vang.mysapo.net/search/suggest.json?q=${encodeURIComponent(message)}`;
 
-      const sapoRes = await fetch(url);
-      const data = await sapoRes.json();
+      const keywordMain = message;
+      const keywordShort = message.split(" ").slice(0, 2).join(" ");
 
-      products = (data.products || []).map(p => ({
+      const url1 = `https://ly-uong-ruou-vang.mysapo.net/search/suggest.json?q=${encodeURIComponent(keywordMain)}`;
+      const url2 = `https://ly-uong-ruou-vang.mysapo.net/search/suggest.json?q=${encodeURIComponent(keywordShort)}`;
+
+      const [r1, r2] = await Promise.all([
+        fetch(url1),
+        fetch(url2)
+      ]);
+
+      const d1 = await r1.json();
+      const d2 = await r2.json();
+
+      const list = [
+        ...(d1.products || []),
+        ...(d2.products || [])
+      ];
+
+      // remove duplicate
+      const map = new Map();
+      list.forEach(p => {
+        if (p && p.id) map.set(p.id, p);
+      });
+
+      products = [...map.values()].map(p => ({
         name: p.name,
         price: p.price,
         url: `https://ly-uong-ruou-vang.mysapo.net/products/${p.alias}`
@@ -53,35 +74,51 @@ export default async function handler(req, res) {
       products = [];
     }
 
-    // ================= 2. IF NO PRODUCTS =================
+    // ================= FALLBACK SMART =================
+    if (products.length === 0) {
+      if (
+        message.toLowerCase().includes("vang") ||
+        message.toLowerCase().includes("ly")
+      ) {
+        products = [
+          {
+            name: "Ly vang đỏ Bohemia 590ml",
+            price: 456000,
+            url: "https://ly-uong-ruou-vang.mysapo.net"
+          }
+        ];
+      }
+    }
+
+    // ================= PRODUCT TEXT =================
     const productText =
       products.length > 0
         ? JSON.stringify(products)
         : "KHÔNG CÓ SẢN PHẨM PHÙ HỢP";
 
-    // ================= 3. OPENAI CHAT =================
+    // ================= AI CHAT =================
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.2, // 🔥 giảm bịa
+      temperature: 0.2,
       messages: [
         {
           role: "system",
           content: `
-Bạn là nhân viên bán hàng cho website ly rượu vang RONA.
+Bạn là nhân viên bán hàng website ly rượu vang RONA.
 
-QUAN TRỌNG:
-- CHỈ được dùng sản phẩm trong danh sách
-- KHÔNG được tự tạo sản phẩm mới
-- KHÔNG được bịa tên sản phẩm
-- Nếu không có sản phẩm → nói "không tìm thấy sản phẩm phù hợp"
+QUY TẮC BẮT BUỘC:
+- CHỈ dùng sản phẩm trong danh sách
+- KHÔNG được tự tạo sản phẩm
+- KHÔNG bịa tên sản phẩm
+- Nếu không có sản phẩm → nói không tìm thấy + gợi ý danh mục
 
 DANH SÁCH SẢN PHẨM:
 ${productText}
 
-Cách trả lời:
+TRẢ LỜI:
 - Ngắn gọn
-- Có tư vấn bán hàng
-- Có thể gợi ý 1–3 sản phẩm trong danh sách
+- Tư vấn bán hàng
+- Ưu tiên chốt đơn
 `
         },
         {
