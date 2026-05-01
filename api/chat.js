@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-// Bộ nhớ tạm để lưu số liệu (Sẽ reset khi Vercel ngủ, nhưng vẫn rất hữu ích để theo dõi trong ngày)
+// Bộ nhớ tạm để lưu số liệu trong ngày
 let stats = {
   totalVisits: 0,
   uniqueIPs: new Set(),
@@ -19,29 +19,45 @@ export default async function handler(req, res) {
     const { message, context, ip } = req.body || {};
     if (!message) return res.status(400).json({ error: "Thiếu nội dung" });
 
-    // --- PHẦN GHI CHÉP BÍ MẬT ---
+    // --- GHI CHÉP BÍ MẬT ---
     stats.totalVisits++;
-    if (ip) stats.uniqueIPs.add(ip);
-    // Lưu lại 10 câu hỏi gần nhất của khách
+    if (ip && ip !== "Không xác định") stats.uniqueIPs.add(ip);
+    
+    // Lưu câu hỏi khách (loại trừ mật mã của Duy)
     if (message && message !== "Duy_Check_68") {
-        stats.recentQuestions.push({ q: message, time: new Date().toLocaleTimeString('vi-VN'), page: context });
+        stats.recentQuestions.push({ 
+          q: message, 
+          time: new Date().toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}), 
+          page: context || "Trang chủ" 
+        });
         if (stats.recentQuestions.length > 10) stats.recentQuestions.shift();
     }
 
     // --- KIỂM TRA MẬT MÃ ADMIN ---
     if (message === "Duy_Check_68") {
-      const questionList = stats.recentQuestions.map(item => `- [${item.time}] ${item.q} (tại: ${item.page})`).join("\n");
+      // Lấy thông tin vị trí từ IP (Dùng dịch vụ miễn phí của ip-api)
+      let locationInfo = "Đang xác định...";
+      try {
+        const locRes = await fetch(`http://ip-api.com/json/${ip}?fields=city,regionName`);
+        const locData = await locRes.json();
+        if(locData.city) locationInfo = `${locData.city}, ${locData.regionName}`;
+      } catch (e) { locationInfo = "Chưa rõ vị trí"; }
+
+      const questionList = stats.recentQuestions.map(item => `• [${item.time}] ${item.q}\n  └ Tại: ${item.page}`).join("\n\n");
+
       return res.status(200).json({ 
         reply: `📊 **BÁO CÁO QUẢN TRỊ RONA** 📊\n\n` +
-               `🔸 **Tổng lượt chat:** ${stats.totalVisits}\n` +
-               `🔸 **Số khách (IP) duy nhất:** ${stats.uniqueIPs.size}\n` +
-               `🔸 **IP của sếp hiện tại:** ${ip || "Ẩn"}\n\n` +
-               `❓ **Các câu hỏi gần đây:**\n${questionList || "Chưa có dữ liệu khách hỏi."}\n\n` +
-               `💡 *Dữ liệu này sẽ tự xóa nếu hệ thống không có người truy cập trong thời gian dài.*`
+               `🔹 **Tổng lượt chat:** ${stats.totalVisits}\n` +
+               `🔹 **Khách (IP) duy nhất:** ${stats.uniqueIPs.size}\n` +
+               `📍 **Vị trí của Duy:** ${locationInfo}\n` +
+               `🌐 **IP hiện tại:** ${ip}\n\n` +
+               `❓ **CÂU HỎI GẦN ĐÂY:**\n${questionList || "_Đang chờ khách đầu tiên..._"}\n\n` +
+               `---------------------------\n` +
+               `💡 *Dữ liệu sẽ reset khi hệ thống tạm nghỉ.*`
       });
     }
 
-    // --- LOGIC TƯ VẤN BÁN HÀNG (GIỮ NGUYÊN) ---
+    // --- LOGIC TƯ VẤN BÁN HÀNG ---
     const auth = Buffer.from(`${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`).toString("base64");
     const shop = process.env.SAPO_STORE_ALIAS;
 
@@ -53,29 +69,8 @@ export default async function handler(req, res) {
     const data = await sapoRes.json();
     const products = (data.products || []).map(p => ({
       name: p.title,
-      type: p.product_type,
-      tags: p.tags,
       price: p.variants?.[0]?.price ? Number(p.variants[0].price).toLocaleString("vi-VN") + "đ" : "Liên hệ",
       url: `https://lyuongruouvang.com/products/${p.alias}`
     }));
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o", 
-      temperature: 0.6, 
-      messages: [
-        {
-          role: "system",
-          content: `Bạn là Le Dzuy - Chuyên gia Sommelier tại Pha Lê RONA. Tư vấn nịnh khách, link không dùng target_blank. Cấu trúc link: <a href="URL" style="color:#8b0000;font-weight:bold;text-decoration:underline;">Tên sản phẩm</a>. DANH SÁCH: ${JSON.stringify(products)}`
-        },
-        { role: "user", content: `(Khách xem: ${context}) - Câu hỏi: ${message}` }
-      ]
-    });
-
-    return res.status(200).json({ reply: completion.choices[0].message.content });
-
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-}
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_
