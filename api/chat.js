@@ -23,36 +23,31 @@ export default async function handler(req, res) {
     const message = body.message || "";
 
     // ================= 1. SEARCH SAPO =================
-    const searchUrl = `https://ly-uong-ruou-vang.mysapo.net/search/suggest.json?q=${encodeURIComponent(message)}`;
+    const url = `https://ly-uong-ruou-vang.mysapo.net/search/suggest.json?q=${encodeURIComponent(message)}`;
 
     let products = [];
 
     try {
-      const r = await fetch(searchUrl);
+      const r = await fetch(url);
       const data = await r.json();
 
       products = (data.products || []).map(p => ({
-        id: p.id,
         name: p.name,
         price: p.price,
         url: `https://ly-uong-ruou-vang.mysapo.net/products/${p.alias}`
       }));
 
-    } catch (e) {
-      console.log("Sapo error:", e);
+    } catch (err) {
+      console.log("Sapo error:", err);
       products = [];
     }
 
-    // ================= 2. FILTER QUAN TRỌNG =================
-    const keyword = message.toLowerCase();
+    // ================= 2. SMART RULE =================
+    const productText = products.length
+      ? JSON.stringify(products)
+      : "[]";
 
-    const filtered = products.filter(p =>
-      p.name.toLowerCase().includes(keyword)
-    );
-
-    const finalProducts = filtered.length ? filtered : products.slice(0, 3);
-
-    // ================= 3. AI =================
+    // ================= 3. OPENAI =================
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.2,
@@ -60,17 +55,18 @@ export default async function handler(req, res) {
         {
           role: "system",
           content: `
-Bạn là nhân viên bán hàng website ly rượu vang RONA.
+Bạn là nhân viên bán hàng ly rượu vang RONA.
 
 QUY TẮC:
-- CHỈ dùng sản phẩm trong danh sách JSON
-- KHÔNG tự tạo sản phẩm
-- Nếu không có phù hợp → nói "không tìm thấy sản phẩm phù hợp"
-- Luôn gợi ý tối đa 3 sản phẩm
-- Luôn có giọng bán hàng tự nhiên
+- KHÔNG được tự tạo sản phẩm
+- KHÔNG được nói "không có sản phẩm"
+- CHỈ dùng danh sách JSON
+- Nếu danh sách rỗng → nói "Đang cập nhật sản phẩm phù hợp"
+- Luôn tư vấn bán hàng tự nhiên
+- Luôn hướng tới chốt đơn
 
 DANH SÁCH SẢN PHẨM:
-${JSON.stringify(finalProducts)}
+${productText}
 `
         },
         {
@@ -82,7 +78,7 @@ ${JSON.stringify(finalProducts)}
 
     return res.status(200).json({
       reply: completion.choices[0].message.content,
-      products: finalProducts
+      products
     });
 
   } catch (err) {
