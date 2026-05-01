@@ -29,14 +29,17 @@ export default async function handler(req, res) {
 
     const data = await sapoRes.json();
 
-    const products = (data.products || []).map(p => ({
-      id: p.id,
-      ten: p.title,
-      gia: p.variants?.[0]?.price
-        ? Number(p.variants[0].price).toLocaleString("vi-VN") + "đ"
-        : "Liên hệ",
-      link: `https://${shop}.mysapo.net/products/${p.alias}`
-    }));
+    // ===== FIX NULL + LỌC RÁC =====
+    const products = (data.products || [])
+      .filter(p => p && p.title && p.variants?.length)
+      .map(p => ({
+        ten: p.title,
+        gia: p.variants?.[0]?.price
+          ? Number(p.variants[0].price).toLocaleString("vi-VN") + "đ"
+          : "Liên hệ",
+
+        link: `https://${shop}.mysapo.net/products/${p.alias}`
+      }));
 
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
@@ -49,14 +52,13 @@ export default async function handler(req, res) {
         {
           role: "system",
           content: `
-Bạn là Duy - chuyên gia tư vấn RONA.
+Bạn là Le Dzuy - chuyên gia ly rượu vang RONA.
 
-QUY TẮC BẮT BUỘC:
-- KHÔNG dùng HTML
-- KHÔNG dùng <a>
-- KHÔNG target="_blank"
-- CHỈ được chọn sản phẩm từ danh sách
-- Trả lời ngắn gọn, gợi ý sản phẩm
+QUY TẮC:
+- Không HTML
+- Không markdown link
+- Chỉ dùng sản phẩm trong danh sách
+- Trả lời ngắn gọn, sang trọng
 
 DANH SÁCH:
 ${JSON.stringify(products)}
