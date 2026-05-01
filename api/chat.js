@@ -1,17 +1,17 @@
 import OpenAI from "openai";
 
 export default async function handler(req, res) {
-
   // ================= CORS =================
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Chỉ POST" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Chỉ hỗ trợ POST" });
+  }
 
   try {
-
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
@@ -20,16 +20,20 @@ export default async function handler(req, res) {
       ? JSON.parse(req.body)
       : req.body || {};
 
-    const message = body.message || "";
+    const message = body.message;
+
+    if (!message) {
+      return res.status(400).json({ error: "Thiếu message" });
+    }
 
     // ================= 1. SEARCH SAPO =================
-    const url = `https://ly-uong-ruou-vang.mysapo.net/search/suggest.json?q=${encodeURIComponent(message)}`;
-
     let products = [];
 
     try {
-      const r = await fetch(url);
-      const data = await r.json();
+      const url = `https://ly-uong-ruou-vang.mysapo.net/search/suggest.json?q=${encodeURIComponent(message)}`;
+
+      const sapoRes = await fetch(url);
+      const data = await sapoRes.json();
 
       products = (data.products || []).map(p => ({
         name: p.name,
@@ -42,28 +46,27 @@ export default async function handler(req, res) {
       products = [];
     }
 
-    // ================= 2. SMART RULE =================
-    const productText = products.length
-      ? JSON.stringify(products)
-      : "[]";
+    // ================= 2. KHÔNG CÓ SP =================
+    const productText =
+      products.length > 0
+        ? JSON.stringify(products)
+        : "KHÔNG_CÓ_SẢN_PHẨM";
 
-    // ================= 3. OPENAI =================
+    // ================= 3. AI CONTROL CHẶT =================
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.2,
+      temperature: 0.1,
       messages: [
         {
           role: "system",
           content: `
-Bạn là nhân viên bán hàng ly rượu vang RONA.
+Bạn là nhân viên bán hàng website ly rượu vang RONA.
 
-QUY TẮC:
-- KHÔNG được tự tạo sản phẩm
-- KHÔNG được nói "không có sản phẩm"
-- CHỈ dùng danh sách JSON
-- Nếu danh sách rỗng → nói "Đang cập nhật sản phẩm phù hợp"
-- Luôn tư vấn bán hàng tự nhiên
-- Luôn hướng tới chốt đơn
+QUY TẮC CỰC KỲ QUAN TRỌNG:
+- CHỈ được dùng sản phẩm trong danh sách
+- TUYỆT ĐỐI không tự bịa sản phẩm
+- Nếu KHÔNG_CÓ_SẢN_PHẨM → nói:
+  "Hiện tại chưa có sản phẩm phù hợp"
 
 DANH SÁCH SẢN PHẨM:
 ${productText}
@@ -82,7 +85,8 @@ ${productText}
     });
 
   } catch (err) {
-    console.log(err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({
+      error: err.message
+    });
   }
 }
