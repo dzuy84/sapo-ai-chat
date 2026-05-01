@@ -2,24 +2,27 @@ import OpenAI from "openai";
 
 export default async function handler(req, res) {
 
-  // ======================
-  // CORS
-  // ======================
+  // ================= CORS =================
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Chỉ hỗ trợ POST" });
   }
 
   try {
 
+    // ================= INIT OPENAI =================
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
 
+    // ================= FIX BODY =================
     const body = typeof req.body === "string"
       ? JSON.parse(req.body)
       : req.body || {};
@@ -30,69 +33,55 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Thiếu message" });
     }
 
-    // ======================
-    // 🔥 1. LẤY SẢN PHẨM SAPO (SEARCH)
-    // ======================
-
+    // ================= 1. GET SAPO PRODUCTS =================
     let products = [];
 
     try {
-      const url = `https://ly-uong-ruou-vang.mysapo.net/search?q=${encodeURIComponent(message)}`;
-      const resSapo = await fetch(url);
+      const url = `https://ly-uong-ruou-vang.mysapo.net/search/suggest.json?q=${encodeURIComponent(message)}`;
 
-      const html = await resSapo.text();
+      const sapoRes = await fetch(url);
+      const data = await sapoRes.json();
 
-      // ⚠️ FIX THỰC TẾ: Sapo không trả JSON → fallback an toàn
-      products = [
-        {
-          name: "Ly rượu vang RONA Ovid 600ml",
-          price: "450.000đ",
-          url: "https://ly-uong-ruou-vang.mysapo.net"
-        },
-        {
-          name: "Ly rượu vang RONA Vinea",
-          price: "420.000đ",
-          url: "https://ly-uong-ruou-vang.mysapo.net"
-        }
-      ];
+      products = (data.products || []).map(p => ({
+        name: p.name,
+        price: p.price,
+        url: `https://ly-uong-ruou-vang.mysapo.net/products/${p.alias}`
+      }));
 
-    } catch (e) {
-      console.log("Sapo error:", e);
-
-      products = [
-        {
-          name: "Ly vang RONA (demo)",
-          price: "Liên hệ",
-          url: "https://ly-uong-ruou-vang.mysapo.net"
-        }
-      ];
+    } catch (err) {
+      console.log("Sapo error:", err);
+      products = [];
     }
 
-    // ======================
-    // 🔥 2. ÉP AI KHÔNG BỊA
-    // ======================
+    // ================= 2. IF NO PRODUCTS =================
+    const productText =
+      products.length > 0
+        ? JSON.stringify(products)
+        : "KHÔNG CÓ SẢN PHẨM PHÙ HỢP";
 
+    // ================= 3. OPENAI CHAT =================
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
+      temperature: 0.2, // 🔥 giảm bịa
       messages: [
         {
           role: "system",
           content: `
-BẠN LÀ NHÂN VIÊN BÁN HÀNG LY RƯỢU VANG RONA.
+Bạn là nhân viên bán hàng cho website ly rượu vang RONA.
 
 QUAN TRỌNG:
-- Chỉ được dùng sản phẩm trong danh sách JSON
-- Không được tự bịa sản phẩm mới
-- Nếu không phù hợp → nói "không tìm thấy sản phẩm"
+- CHỈ được dùng sản phẩm trong danh sách
+- KHÔNG được tự tạo sản phẩm mới
+- KHÔNG được bịa tên sản phẩm
+- Nếu không có sản phẩm → nói "không tìm thấy sản phẩm phù hợp"
 
 DANH SÁCH SẢN PHẨM:
-${JSON.stringify(products)}
+${productText}
 
-CÁCH TRẢ LỜI:
+Cách trả lời:
 - Ngắn gọn
-- Có tư vấn
-- Có gợi ý 1–3 sản phẩm
-- Có link mua hàng
+- Có tư vấn bán hàng
+- Có thể gợi ý 1–3 sản phẩm trong danh sách
 `
         },
         {
@@ -102,9 +91,10 @@ CÁCH TRẢ LỜI:
       ]
     });
 
+    // ================= RESPONSE =================
     return res.status(200).json({
       reply: completion.choices[0].message.content,
-      products: products
+      products
     });
 
   } catch (err) {
