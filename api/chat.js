@@ -12,93 +12,51 @@ export default async function handler(req, res) {
     const { message } = req.body || {};
     if (!message) return res.status(400).json({ error: "Thiếu nội dung" });
 
-    // ================= SAPO API =================
-    const auth = Buffer.from(
-      `${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`
-    ).toString("base64");
-
+    const auth = Buffer.from(`${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`).toString("base64");
     const shop = process.env.SAPO_STORE_ALIAS;
 
     const sapoRes = await fetch(
-      `https://${shop}.mysapo.net/admin/products.json?limit=100`,
-      {
-        headers: { Authorization: `Basic ${auth}` }
-      }
+      `https://${shop}.mysapo.net/admin/products.json?limit=250`,
+      { headers: { Authorization: `Basic ${auth}` } }
     );
 
     const data = await sapoRes.json();
+    const allProducts = (data.products || []).map(p => ({
+      name: p.title,
+      price: p.variants?.[0]?.price ? Number(p.variants[0].price).toLocaleString("vi-VN") + "đ" : "Liên hệ",
+      url: `https://lyuongruouvang.com/products/${p.alias}` // SỬA LINK CHUẨN
+    }));
 
-    const products = (data.products || [])
-      .filter(p => p?.title)
-      .map(p => ({
-        name: p.title,
-        price: p.variants?.[0]?.price || 0,
-        url: `https://${shop}.mysapo.net/products/${p.alias}`
-      }));
-
-    // ================= OPENAI (MẠNH HƠN) =================
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
-    });
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o",   // 🔥 NÂNG CẤP TỪ MINI -> 4o
-      temperature: 0.4,
-
+      model: "gpt-4o", 
+      temperature: 0.5,
       messages: [
         {
           role: "system",
           content: `
-Bạn là "Le Dzuy - AI bán hàng cao cấp RONA (Shopee AI style)".
+Bạn là "Le Dzuy" - chuyên gia tư vấn pha lê cao cấp RONA.
+NHIỆM VỤ: Tư vấn sản phẩm và trả về danh sách sản phẩm khớp với nhu cầu dưới dạng JSON.
 
-QUY TẮC TUYỆT ĐỐI:
-- KHÔNG dùng HTML <a>
-- KHÔNG markdown link
-- KHÔNG JSON lỗi
-- CHỈ trả text + danh sách sản phẩm
-
-NHIỆM VỤ:
-1. Hiểu nhu cầu khách
-2. Chọn 1–5 sản phẩm phù hợp nhất
-3. Trả về theo format:
-
-REPLY:
-...
-
-PRODUCTS:
-- name:
-- price:
-- url:
-
-PHONG CÁCH:
-- lịch sự
-- tư vấn như chuyên gia pha lê
-- gợi ý upsell nhẹ nhàng
+QUY TẮC PHẢN HỒI:
+1. Tư vấn ngọt ngào, nịnh khách, am hiểu về vang (Ly to cho vang đỏ, ly nhỏ vang trắng).
+2. Khi giới thiệu sản phẩm trong bài viết, dùng thẻ: <a href="URL" target="_blank" style="color:#8b0000;font-weight:bold;">Tên sản phẩm</a>
+3. Cấu trúc câu trả lời luôn bao gồm lời chào và lời chúc.
 
 DANH SÁCH SẢN PHẨM:
-${JSON.stringify(products)}
+${JSON.stringify(allProducts)}
 `
         },
-        {
-          role: "user",
-          content: message
-        }
+        { role: "user", content: message }
       ]
     });
 
-    const text = completion.choices[0].message.content;
-
-    // ================= PARSE PRODUCTS =================
-    const result = {
-      reply: text,
-      products: products.slice(0, 5)
-    };
-
-    return res.status(200).json(result);
+    return res.status(200).json({
+      reply: completion.choices[0].message.content
+    });
 
   } catch (err) {
-    return res.status(500).json({
-      error: err.message
-    });
+    return res.status(500).json({ error: err.message });
   }
 }
