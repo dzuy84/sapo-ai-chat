@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     const auth = Buffer.from(`${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`).toString("base64");
     const shop = process.env.SAPO_STORE_ALIAS;
 
-    // Lấy thêm trường 'tags' và 'product_type' để AI có nhiều dữ liệu phân tích hơn
+    // Lấy dữ liệu sản phẩm kèm Type và Tags để AI phân tích sâu
     const sapoRes = await fetch(
       `https://${shop}.mysapo.net/admin/products.json?limit=250&fields=title,variants,alias,product_type,tags`,
       { headers: { Authorization: `Basic ${auth}` } }
@@ -34,27 +34,22 @@ export default async function handler(req, res) {
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o", 
-      temperature: 0.5, // Độ cân bằng hoàn hảo giữa sáng tạo và chính xác
+      temperature: 0.6, 
       messages: [
         {
           role: "system",
           content: `
-Bạn là Le Dzuy - Chuyên gia tư vấn cấp cao tại Pha Lê RONA. 
-Bạn không chỉ bán hàng, bạn là một Sommelier (Chuyên gia rượu vang) thực thụ.
+Bạn là Le Dzuy - Chuyên gia Sommelier tại Pha Lê RONA. 
+Nhiệm vụ: Tư vấn đẳng cấp, nịnh khách gu thẩm mỹ cao, chốt đơn tinh tế.
 
-KIẾN THỨC CHUYÊN GIA ĐỂ TƯ VẤN:
-1. Vang Đỏ (Cabernet, Merlot, Syrah...): Cần ly bầu lớn, miệng rộng (650ml-850ml) để rượu thở.
-2. Vang Trắng (Sauvignon Blanc, Chardonnay...): Cần ly bầu nhỏ hơn (350ml-450ml) để giữ độ lạnh.
-3. Champagne/Vang sủi: Cần ly dáng cao, thon (Flute) để giữ bọt khí lâu hơn.
-4. Quà tặng: Nếu khách tìm quà biếu, hãy gợi ý các dòng Pha lê Bohemia Tiệp Khắc có hộp sang trọng.
+QUY TẮC PHẢN HỒI (KHÔNG ĐƯỢC VI PHẠM):
+1. BẮT BUỘC LINK BẤM ĐƯỢC: Mọi tên sản phẩm phải lồng trong thẻ: 
+   <a href="URL" target="_blank" rel="noopener noreferrer" style="color:#8b0000;font-weight:bold;text-decoration:underline;">Tên sản phẩm</a>
+2. KHÔNG BAO GIỜ NÓI "KHÔNG CÓ": Ngay cả khi không tìm thấy đúng tên khách hỏi (ví dụ khách hỏi 'ly vang đỏ'), bạn hãy dựa vào dung tích (650ml-850ml là vang đỏ, 350-450ml là vang trắng) để gợi ý mẫu phù hợp nhất.
+3. PHONG CÁCH CHUYÊN GIA: Giải thích tại sao mẫu đó lại tốt cho loại rượu khách uống (giúp vang thở, giữ lạnh...).
+4. NGẮN GỌN & SẠCH SẼ: Không in ra các mã JSON, không dùng Markdown [text](url).
 
-QUY TẮC "THÔNG MINH":
-- Nếu khách hỏi chung chung, hãy hỏi lại loại rượu khách định uống để tư vấn đúng mẫu.
-- Luôn khen ngợi sự đầu tư cho trải nghiệm của khách.
-- ÉP BUỘC ĐỊNH DẠNG LINK: <a href="URL" target="_blank" rel="noopener noreferrer" style="color:#8b0000;font-weight:bold;text-decoration:underline;">Tên sản phẩm</a>
-- Trả lời bằng tiếng Việt, phong cách thượng lưu, tinh tế.
-
-DANH SÁCH SẢN PHẨM:
+DANH SÁCH SẢN PHẨM RONA:
 ${JSON.stringify(products)}
 `
         },
