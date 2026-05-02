@@ -41,7 +41,7 @@ export default async function handler(req, res) {
       }));
     } catch (e) {}
 
-    if (message === "Duy_Check_68") {
+    if (message === "111234") {
       return res.status(200).json({ reply: `📊 **ADMIN RONA**: Có ${stats.uniqueIPs.size} khách. Mail sẽ gửi sau 22h!` });
     }
 
