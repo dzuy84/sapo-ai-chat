@@ -65,7 +65,7 @@ export default async function handler(req, res) {
           4. Kịch bản: Phân biệt champagne, cam kết bảo hành vỡ hỏng 1-đổi-1 khi vận chuyển.
           5. ĐỊNH DẠNG: 
              - Dùng thẻ <a> cho sản phẩm: <a href="URL" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Tên Sản Phẩm / Product Name</a>.
-             - Điều hướng Zalo/WhatsApp: <a href="https://zalo.me/0963111234" style="color:#0068ff; font-weight:bold;">Chat Zalo/WhatsApp với Duy</a>.
+             - Điều hướng Zalo/WhatsApp: <a href="https://zalo.me/0963111234" style="color:#0068ff; font-weight:bold;">Chat Zalo/WhatsApp với Glas</a>.
           
           DANH SÁCH SẢN PHẨM: ${JSON.stringify(products)}`
         },
@@ -76,7 +76,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ reply: completion.choices[0].message.content });
 
   } catch (err) {
-    return res.status(200).json({ reply: "Duy đang bận phục vụ rượu cho khách, anh/chị nhắn Zalo Duy tư vấn ngay nhé!" });
+    return res.status(200).json({ reply: "Glas đang bận phục vụ rượu cho khách, anh/chị nhắn Zalo Glas tư vấn ngay nhé!" });
   }
 }
 
