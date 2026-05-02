@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     const today = now.toLocaleDateString('vi-VN');
     const currentHour = now.getHours();
 
-    if (message && message !== "Kiem111") {
+    if (message && message !== "111234") {
       stats.totalVisits++;
       if (ip) stats.uniqueIPs.add(ip);
       stats.recentQuestions.push({ 
