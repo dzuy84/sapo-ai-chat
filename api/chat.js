@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     const today = now.toLocaleDateString('vi-VN');
 
     // 1. LƯU THÔNG TIN (KHÔNG GỬI MAIL NGAY)
-    if (message && message !== "nhjnguy3n") {
+    if (message && message !== "Duy_Check_68") {
       stats.totalVisits++;
       if (ip) stats.uniqueIPs.add(ip);
       stats.recentQuestions.push({ 
