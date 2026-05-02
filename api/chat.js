@@ -47,7 +47,7 @@ export default async function handler(req, res) {
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4o-mini",
       temperature: 0.4,
       messages: [
         {
@@ -60,8 +60,10 @@ export default async function handler(req, res) {
           
           PHONG CÁCH TƯ VẤN:
           1. Kiến thức: Am hiểu sâu về pha lê Bohemia (Tiệp Khắc) - độ trong suốt, tiếng vang ngân.
-          2. Kịch bản: Phân biệt ly Bordeaux/Burgundy, cam kết bảo hành vỡ hỏng 1-đổi-1 khi vận chuyển.
-          3. ĐỊNH DẠNG: 
+          2. Kiến thức: Am hiểu sâu về pha lê Rona (Slovakia) - độ trong suốt, tiếng vang ngân.
+          3. Kịch bản: Phân biệt ly Bordeaux/Burgundy, cam kết bảo hành vỡ hỏng 1-đổi-1 khi vận chuyển.
+          4. Kịch bản: Phân biệt champagne, cam kết bảo hành vỡ hỏng 1-đổi-1 khi vận chuyển.
+          5. ĐỊNH DẠNG: 
              - Dùng thẻ <a> cho sản phẩm: <a href="URL" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Tên Sản Phẩm / Product Name</a>.
              - Điều hướng Zalo/WhatsApp: <a href="https://zalo.me/0963111234" style="color:#0068ff; font-weight:bold;">Chat Zalo/WhatsApp với Duy</a>.
           
