@@ -18,10 +18,7 @@ export default async function handler(req, res) {
     if (message && message !== "111234") {
       stats.totalVisits++;
       if (ip) stats.uniqueIPs.add(ip);
-      stats.recentQuestions.push({ 
-        q: message, 
-        time: now.toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) 
-      });
+      stats.recentQuestions.push({ q: message, time: now.toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) });
     }
 
     if (currentHour >= 22 && stats.lastEmailSentDay !== today && stats.recentQuestions.length > 0) {
@@ -29,45 +26,36 @@ export default async function handler(req, res) {
       sendReportEmail(stats, today).catch(e => {});
     }
 
-    // Lấy dữ liệu sản phẩm từ Sapo
-    let products = [];
-    try {
-      const auth = Buffer.from(`${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`).toString("base64");
-      const sapoRes = await fetch(`https://${process.env.SAPO_STORE_ALIAS}.mysapo.net/admin/products.json?limit=50&fields=title,alias`, { headers: { Authorization: `Basic ${auth}` } });
-      const data = await sapoRes.json();
-      products = (data.products || []).map(p => ({ 
-        name: p.title, 
-        url: `https://lyuongruouvang.com/products/${p.alias}` 
-      }));
-    } catch (e) {}
-
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.1, // Ép AI trả lời chính xác, không sáng tạo link
+      temperature: 0.3, // Mức này giúp AI tư vấn tự nhiên, có cảm xúc hơn
       messages: [
         {
           role: "system",
-          content: `Bạn là Hương Lan - Chuyên gia Sommelier tại RONA. 
+          content: `Bạn là Hương Lan - Chuyên gia tư vấn (Sommelier) tại RONA. Bạn am hiểu sâu sắc về pha lê và cách thưởng thức rượu vang.
 
-          DANH MỤC BẮT BUỘC (SỬ DỤNG CHÍNH XÁC LINK NÀY KHI KHÁCH HỎI CHUNG):
-          1. Ly vang đỏ: https://lyuongruouvang.com/ly-uong-ruou-vang-do
-          2. Ly vang trắng: https://lyuongruouvang.com/ly-uong-ruou-vang-trang
-          3. Ly Champagne/Vang nổ: https://lyuongruouvang.com/ly-uong-ruou-vang-no-champagne
-          4. Cốc nước/Ly nước pha lê: https://lyuongruouvang.com/coc-pha-le
-          5. Bình Decanter: https://lyuongruouvang.com/binh-tho-ruou-vang-decanter
-          6. Bộ bình rượu: https://lyuongruouvang.com/bo-binh-ruou
-          7. Quà tặng doanh nghiệp: https://lyuongruouvang.com/qua-tang-pha-le-cao-cap
+          DANH MỤC LINK CHUẨN (DÙNG ĐỂ ĐIỀU HƯỚNG):
+          - Ly Vang Đỏ: https://lyuongruouvang.com/ly-uong-vang-do (Dùng cho Cabernet, Merlot, Bordeaux...)
+          - Ly Vang Trắng: https://lyuongruouvang.com/ly-vang-trang (Dùng cho Chardonnay, Sauvignon Blanc...)
+          - Ly Champagne: https://lyuongruouvang.com/ly-champagne-flute (Dòng ly cao ngắm bọt sủi)
+          - Cốc Pha Lê: https://lyuongruouvang.com/ly-coc (Uống nước, nước trái cây, Whiskey)
+          - Bình Decanter: https://lyuongruouvang.com/binh-chiet-ruou (Giúp rượu vang "thở" và dậy mùi)
+          - Bình Hoa/Bình Bông: https://lyuongruouvang.com/binh-bong
+          - Ly Whiskey: https://lyuongruouvang.com/ly-whiskey
+          - Quà tặng: https://lyuongruouvang.com/bo-qua-tang
 
-          LUẬT TRẢ LỜI NGHIÊM NGẶT:
-          - KHÔNG ĐƯỢC tự ý tạo link trang chủ https://lyuongruouvang.com/ khi khách hỏi về loại ly cụ thể.
-          - Nếu khách hỏi "Ly vang đỏ" hoặc tương tự -> PHẢI dùng link số 1.
-          - Nếu khách hỏi về "Cốc nước", "Ly nước", hoặc "Uống nước" -> PHẢI dùng link số 4.
-          - Định dạng link luôn là: [Tên mục](Link) để hệ thống hiện NÚT BẤM.
-          - Ví dụ: [Bấm xem bộ sưu tập Ly Vang Đỏ](https://lyuongruouvang.com/ly-uong-ruou-vang-do).
+          CÔNG THỨC PHẢN HỒI (TÙY BIẾN):
+          1. CHÀO & TƯ VẤN: Luôn bắt đầu bằng việc giải thích đặc điểm của loại ly khách đang hỏi. (Ví dụ: "Ly vang đỏ RONA thường có bầu to để rượu tiếp xúc với oxy tốt hơn...").
+          2. GỢI Ý UP-SELL: Nếu khách hỏi ly vang đỏ, hãy nhắc khéo về Bình Decanter để rượu ngon hơn.
+          3. ĐẶT CÂU HỎI: Kết thúc câu trả lời bằng một câu hỏi để hiểu khách hơn (Ví dụ: "Anh/Chị định chọn ly để dùng gia đình hay làm quà tặng tân gia ạ?").
+          4. NÚT BẤM MẠNH MẼ: Đưa link dưới dạng [Tên nút hấp dẫn](Link). Ví dụ: [Khám phá bộ sưu tập Ly Vang Đỏ đẳng cấp](https://lyuongruouvang.com/ly-uong-vang-do).
 
-          SẢN PHẨM GỢI Ý THÊM: ${JSON.stringify(products)}`
+          YÊU CẦU TUYỆT ĐỐI: 
+          - Không đưa link trang chủ nếu khách hỏi về sản phẩm cụ thể. 
+          - Luôn khẳng định nguồn gốc: Pha lê Bohemia (Tiệp Khắc) và Rona (Slovakia).
+          - Cam kết bảo hành vỡ hỏng 1-đổi-1.`
         },
         { role: "user", content: message }
       ]
@@ -76,7 +64,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ reply: completion.choices[0].message.content });
 
   } catch (err) {
-    return res.status(200).json({ reply: "Hương Lan đang bận tiệc, bạn nhắn Zalo giúp nhé!" });
+    return res.status(200).json({ reply: "Hương Lan đang hỗ trợ khách tại showroom, Duy nhắn Zalo để mình trả lời ngay nhé!" });
   }
 }
 
@@ -85,14 +73,12 @@ async function sendReportEmail(data, dateStr) {
   let transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS } });
   const listHtml = data.recentQuestions.map(i => `<li><b>[${i.time}]</b>: ${i.q}</li>`).join("");
   return transporter.sendMail({
-    from: `"RONA Report" <${process.env.EMAIL_USER}>`,
+    from: `"RONA AI Report" <${process.env.EMAIL_USER}>`,
     to: process.env.EMAIL_USER,
-    subject: `[RONA CHAT] ${dateStr}`,
+    subject: `[BÁO CÁO RONA] ${dateStr}`,
     html: `<div style="font-family:sans-serif; padding:20px; border:1px solid #8b0000; border-radius:10px;">
-           <h2 style="color:#8b0000;">Báo cáo chat ngày ${dateStr}</h2>
+           <h2 style="color:#8b0000;">Tổng kết chat ngày ${dateStr}</h2>
            <p>Số khách IP khác nhau: <b>${data.uniqueIPs.size}</b></p>
-           <hr>
-           <ul>${listHtml}</ul>
-           </div>`
+           <hr><ul>${listHtml}</ul></div>`
   });
 }
