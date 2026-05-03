@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
 
   try {
-    const { message, context, ip } = req.body || {}; // Biến context nhận từ Giao diện Sapo
+    const { message, context, ip } = req.body || {}; 
     const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
     const today = now.toLocaleDateString('vi-VN');
     const currentHour = now.getHours();
@@ -33,7 +33,6 @@ export default async function handler(req, res) {
     let products = [];
     try {
       const auth = Buffer.from(`${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`).toString("base64");
-      // Thêm trường product_type để AI có thêm dữ liệu tóm tắt chuyên sâu
       const sapoRes = await fetch(`https://${process.env.SAPO_STORE_ALIAS}.mysapo.net/admin/products.json?limit=150&fields=title,variants,alias,product_type`, { headers: { Authorization: `Basic ${auth}` } });
       const data = await sapoRes.json();
       products = (data.products || []).map(p => ({ 
@@ -49,7 +48,6 @@ export default async function handler(req, res) {
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     
-    // Xử lý logic tin nhắn gửi đi
     let userContent = message;
     if (context) {
       userContent = `Tôi đang quan tâm đến sản phẩm: ${context}. Nếu tôi yêu cầu tóm tắt, hãy dựa vào danh sách sản phẩm bạn có để trả lời chuyên nghiệp nhất. Câu hỏi của tôi là: ${message}`;
@@ -63,16 +61,19 @@ export default async function handler(req, res) {
           role: "system",
           content: `Bạn là Hương Lan - Sommelier cao cấp tại RONA.
           
-          NHIỆM VỤ TÓM TẮT:
-          - Khi khách nhấp vào sản phẩm hoặc hỏi về sản phẩm cụ thể, hãy lục trong DANH SÁCH SẢN PHẨM.
-          - Tóm tắt ngắn gọn: Tên, loại ly (đỏ/trắng/champagne), đặc điểm pha lê (Tiệp Khắc/Slovakia) và bảo hành 1-đổi-1.
-          - Luôn giữ phong thái sang trọng, am hiểu.
+          NHIỆM VỤ CHUYÊN MÔN:
+          - Khi khách nhấp vào hoặc hỏi về sản phẩm, hãy tra cứu trong DANH SÁCH SẢN PHẨM bên dưới.
+          - Tóm tắt: Tên, loại (ly vang/cốc nước), xuất xứ (Pha lê Tiệp Khắc/Slovakia), bảo hành 1-đổi-1.
+          
+          CHIẾN LƯỢC GỢI Ý (UP-SELL):
+          - Nếu khách hỏi về việc dùng ly vang để uống nước lọc/nước trái cây: Hãy trả lời là "Có thể dùng được để tạo phong cách sang trọng", NHƯNG sau đó PHẢI khéo léo gợi ý khách tham khảo thêm các bộ "Cốc nước pha lê" (product_type thường là 'Cốc nước' hoặc 'Ly nước') để sử dụng thuận tiện và bền bỉ hơn hàng ngày.
+          - Luôn đưa ra link sản phẩm cụ thể từ danh sách nếu tìm thấy mẫu phù hợp.
 
-          DANH SÁCH SẢN PHẨM ĐỂ TRA CỨU: ${JSON.stringify(products)}
+          DANH SÁCH SẢN PHẨM: ${JSON.stringify(products)}
 
-          NGÔN NGỮ & PHONG CÁCH:
-          - Tiếng Việt lịch sự hoặc Tiếng Anh tinh tế tùy khách.
-          - ĐỊNH DẠNG: Thẻ <a> cho link sản phẩm và Zalo.`
+          ĐỊNH DẠNG TRẢ LỜI:
+          - Sử dụng markdown [Tên sản phẩm](đường link) để hiển thị sản phẩm.
+          - Phong cách: Sang trọng, tinh tế, am hiểu chuyên sâu về pha lê.`
         },
         { role: "user", content: userContent }
       ]
