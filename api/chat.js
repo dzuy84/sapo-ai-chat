@@ -10,7 +10,8 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
 
   try {
-    const { message, context, ip } = req.body || {}; 
+    // Thêm history vào để nhận lịch sử chat từ giao diện gửi lên
+    const { message, history, context, ip } = req.body || {}; 
     const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
     const today = now.toLocaleDateString('vi-VN');
     const currentHour = now.getHours();
@@ -30,7 +31,7 @@ export default async function handler(req, res) {
     
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.1, // Để AI giữ độ chính xác cao khi trích xuất link
+      temperature: 0.1, 
       messages: [
         {
           role: "system",
@@ -66,11 +67,14 @@ export default async function handler(req, res) {
              - Quà tặng: https://lyuongruouvang.com/bo-qua-tang
 
           QUY TẮC PHẢN HỒI:
-          - Khi khách hỏi sản phẩm, hãy giải thích ngắn gọn ưu điểm (Pha lê Bohemia/Rona, bảo hành vỡ hỏng).
-          - Sau đó đưa link danh mục tương ứng dưới dạng nút bấm: [Xem bộ sưu tập sản phẩm](Link).
-          - Nếu khách hỏi chung chung, hãy hỏi ngược lại để thu hẹp nhu cầu rồi mới đưa link.
-          - TUYỆT ĐỐI không dẫn về trang chủ nếu đã xác định được nhu cầu của khách.`
+          - Dựa vào lịch sử hội thoại để trả lời bám sát câu hỏi của khách.
+          - Khi khách hỏi sản phẩm, giải thích ngắn gọn ưu điểm (Pha lê Bohemia/Rona, bảo hành vỡ hỏng).
+          - Đưa link danh mục tương ứng dưới dạng nút bấm: [Xem bộ sưu tập sản phẩm](Link).
+          - Nếu khách nói "Có", "Đúng rồi", "Ok" hãy xem câu trước đó mình đã gợi ý gì để đưa link chính xác.
+          - Tuyệt đối không dẫn về trang chủ nếu đã xác định được nhu cầu.`
         },
+        // Chèn lịch sử chat vào đây để AI nhớ nội dung cũ
+        ...(history || []), 
         { role: "user", content: message }
       ]
     });
