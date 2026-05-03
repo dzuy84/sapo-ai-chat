@@ -1,71 +1,92 @@
 const { OpenAI } = require("openai");
+const nodemailer = require("nodemailer");
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
 });
 
+let dailyStats = { questions: [], visitorIPs: new Set(), lastSentDay: null };
+
 module.exports = async (req, res) => {
-  // Cấu hình để chat chạy được trên web
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { message, history = [] } = req.body;
+  const { message, history = [], ip } = req.body;
+  const today = new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
 
   try {
-    const sapoAlias = process.env.SAPO_STORE_ALIAS; // ly-uong-ruou-vang
-    const sapoToken = process.env.SAPO_API_SECRET; // Mã 07c03d...
-
-    let productContext = "";
-
-    try {
-      // Tìm sản phẩm thông minh hơn: Tách bỏ số để tìm tên trước
-      const cleanQuery = message.replace(/[0-9]/g, '').trim();
-      const sapoRes = await fetch(
-        `https://${sapoAlias}.mysapo.net/admin/products.json?limit=5&title=${encodeURIComponent(cleanQuery || message)}`,
-        {
-          headers: {
-            "X-Sapo-Access-Token": sapoToken,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      const sapoData = await sapoRes.json();
-
-      if (sapoData.products && sapoData.products.length > 0) {
-        productContext = "DỮ LIỆU THỰC TẾ TỪ KHO RONA:\\n" +
-          sapoData.products.map((p) => {
-            const price = p.variants?.[0]?.price ? Number(p.variants[0].price).toLocaleString("vi-VN") + "đ" : "Liên hệ";
-            return `- ${p.title}\\n  Giá: ${price}\\n  Link: https://lyuongruouvang.com/products/${p.handle}`;
-          }).join("\\n\\n");
-      } else {
-        productContext = "Không tìm thấy sản phẩm cụ thể. Mời khách xem tại: https://lyuongruouvang.com/collections/all";
-      }
-    } catch (err) {
-      productContext = "Lỗi kết nối kho Sapo.";
+    if (message) {
+      dailyStats.questions.push(message);
+      if (ip) dailyStats.visitorIPs.add(ip);
     }
 
-    const aiRes = await openai.chat.completions.create({
+    // LẤY DỮ LIỆU SAPO (Dùng Access Token cho an toàn)
+    const sapoAlias = process.env.SAPO_STORE_ALIAS; // ly-uong-ruou-vang
+    const sapoToken = process.env.SAPO_API_SECRET; // Mã shpat_... hoặc 07c03d...
+    
+    let productContext = "";
+    try {
+      const sapoRes = await fetch(`https://${sapoAlias}.mysapo.net/admin/products/search.json?query=${encodeURIComponent(message)}&limit=3`, {
+        headers: {
+          "X-Sapo-Access-Token": sapoToken,
+          "Content-Type": "application/json"
+        }
+      });
+      const sapoData = await sapoRes.json();
+      
+      if (sapoData.products && sapoData.products.length > 0) {
+        productContext = "Sản phẩm thực tế trong kho RONA:\n" + sapoData.products.map(p => {
+          const price = p.variants[0]?.price ? Number(p.variants[0].price).toLocaleString("vi-VN") + "đ" : "Liên hệ";
+          return `- ${p.title}: Giá ${price}. Link: https://lyuongruouvang.com/products/${p.handle}`;
+        }).join("\n");
+      } else {
+        productContext = "Không tìm thấy. Dẫn khách xem: https://lyuongruouvang.com/collections/all";
+      }
+    } catch (e) {
+      productContext = "Lỗi kết nối Sapo.";
+    }
+
+    const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        {
-          role: "system",
-          content: `Bạn là Hương Lan - chuyên gia tư vấn của RONA. 
-          QUY TẮC: 
-          1. CHỈ ĐƯỢC dùng giá và link từ dữ liệu này: ${productContext}. 
-          2. Tuyệt đối không tự chế link tham khảo chung chung. 
-          3. Nếu khách hỏi dung tích (ví dụ 650ml), hãy ưu tiên chỉ ra sản phẩm khớp hoặc tương tự nhất trong danh sách.`
+        { 
+          role: "system", 
+          content: `Bạn là Hương Lan, chuyên gia RONA. BẮT BUỘC: Chỉ dùng link/giá từ kho: ${productContext}. Không tự chế link.` 
         },
         ...history,
         { role: "user", content: message },
       ],
     });
 
-    return res.status(200).json({ reply: aiRes.choices[0].message.content });
+    const botReply = response.choices[0].message.content;
+
+    // BÁO CÁO 22H
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+    if (now.getHours() >= 22 && dailyStats.lastSentDay !== today && dailyStats.questions.length > 0) {
+      try {
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: process.env.EMAIL_USER,
+          subject: `[RONA] Báo cáo ngày ${today}`,
+          html: `<h3>Tổng kết:</h3><p>Khách: ${dailyStats.visitorIPs.size}</p><ul>${dailyStats.questions.map(q => `<li>${q}</li>`).join("")}</ul>`
+        });
+        dailyStats.lastSentDay = today;
+        dailyStats.questions = [];
+      } catch (mE) {}
+    }
+
+    res.status(200).json({ reply: botReply });
+
   } catch (error) {
-    return res.status(500).json({ reply: "Hương Lan đang kiểm tra kho, Duy chờ tí nhé!" });
+    res.status(500).json({ reply: "Duy ơi, hệ thống đang bảo trì tí nhé!" });
   }
 };
