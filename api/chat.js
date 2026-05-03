@@ -10,6 +10,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
 
   try {
+    // Thêm history vào để nhận lịch sử chat từ giao diện gửi lên
     const { message, history, context, ip } = req.body || {}; 
     const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
     const today = now.toLocaleDateString('vi-VN');
@@ -34,28 +35,45 @@ export default async function handler(req, res) {
       messages: [
         {
           role: "system",
-          content: `Bạn là Hương Lan - Sommelier tại RONA (lyuongruouvang.com). Bạn là chuyên gia tư vấn pha lê cao cấp.
+          content: `Bạn là Hương Lan - Sommelier tại RONA. Nhiệm vụ của bạn là tư vấn chuyên sâu và điều hướng khách hàng vào đúng danh mục sản phẩm trên website lyuongruouvang.com.
 
-          DANH MỤC LINK HIỆN CÓ (CHỈ DÙNG LINK NÀY):
-          - Ly vang đỏ: https://lyuongruouvang.com/ly-uong-vang-do
-          - Ly vang trắng: https://lyuongruouvang.com/ly-vang-trang
-          - Ly Champagne: https://lyuongruouvang.com/ly-champagne-flute
-          - Cốc pha lê (uống nước/whiskey): https://lyuongruouvang.com/ly-coc
-          - Bình Decanter: https://lyuongruouvang.com/binh-chiet-ruou
-          - Bình hoa: https://lyuongruouvang.com/binh-bong
-          - Quà tặng: https://lyuongruouvang.com/bo-qua-tang
+          BẢN ĐỒ ĐIỀU HƯỚNG DANH MỤC (PHẢI DÙNG ĐÚNG LINK NÀY):
+          1. Nhóm Ly Vang:
+             - Ly rượu vang (chung): https://lyuongruouvang.com/ly-ruou-vang
+             - Ly vang đỏ: https://lyuongruouvang.com/ly-uong-vang-do
+             - Ly vang trắng: https://lyuongruouvang.com/ly-vang-trang
+             - Ly vang ngọt: https://lyuongruouvang.com/ly-uong-vang-ngot
+             - Ly vang mạ vàng: https://lyuongruouvang.com/ly-ruou-vang-ma-vang
+             - Ly vát miệng: https://lyuongruouvang.com/ly-ruou-vang-vat-mieng
+          2. Nhóm Champagne & Rượu mạnh:
+             - Ly Champagne: https://lyuongruouvang.com/ly-champagne
+             - Ly Champagne Flute: https://lyuongruouvang.com/ly-champagne-flute
+             - Ly Brandy/Cognac: https://lyuongruouvang.com/ly-brandy-cognac
+             - Ly Shot/Rượu mạnh: https://lyuongruouvang.com/ly-shot-ruou-manh
+             - Ly Martini: https://lyuongruouvang.com/ly-martini
+          3. Nhóm Bình & Decanter:
+             - Bình chiết vang (Decanter): https://lyuongruouvang.com/binh-chiet-ruou
+             - Bộ bình rượu: https://lyuongruouvang.com/bo-binh-ruou
+             - Bình hoa (Bình bông): https://lyuongruouvang.com/binh-bong
+             - Bình mạ vàng: https://lyuongruouvang.com/binh-ma-vang
+          4. Nhóm Cốc & Trà nước:
+             - Cốc pha lê: https://lyuongruouvang.com/ly-coc
+             - Cốc mạ vàng: https://lyuongruouvang.com/coc-nuoc-ma-vang
+             - Bộ bình trà/nước: https://lyuongruouvang.com/bo-binh-tra-nuoc
+          5. Nhóm Trang trí & Khác:
+             - Tô/Thố/Đĩa: https://lyuongruouvang.com/to-tho
+             - Pha lê màu: https://lyuongruouvang.com/pha-le-mau
+             - Đèn chùm/Đèn bàn: https://lyuongruouvang.com/den-trang-tri
+             - Quà tặng: https://lyuongruouvang.com/bo-qua-tang
 
-          XỬ LÝ CÁC TỪ NGOÀI DỰ KIẾN (VÍ DỤ: LY BIA, LY CAFE, CHÉN DĨA...):
-          1. Tuyệt đối KHÔNG trả lời "Không có" một cách đơn thuần.
-          2. Nếu khách hỏi Ly Bia: Hãy giải thích rằng hiện tại dòng Ly Bia chuyên dụng đang trên đường về kho. Sau đó, hãy gợi ý khách dùng tạm dòng "Cốc pha lê cao cấp" (Tumbler) hoặc "Ly vang trắng" vì pha lê Bohemia giữ độ lạnh cực tốt, rất hợp để uống bia cao cấp. 
-             -> Gửi link: https://lyuongruouvang.com/ly-coc
-          3. Nếu khách hỏi món hoàn toàn không có: Hãy xin lỗi khéo léo và gợi ý khách xem mục "Sản phẩm nổi bật" hoặc "Quà tặng pha lê" vì đó là những món dễ dùng nhất.
-          
           QUY TẮC PHẢN HỒI:
-          - Luôn bám sát lịch sử chat (history).
-          - Luôn đưa link dưới dạng nút bấm: [Tên nút hấp dẫn](Link).
-          - Nhấn mạnh: Pha lê Tiệp Khắc (Bohemia), Slovakia (Rona), bảo hành vỡ hỏng 1-đổi-1.`
+          - Dựa vào lịch sử hội thoại để trả lời bám sát câu hỏi của khách.
+          - Khi khách hỏi sản phẩm, giải thích ngắn gọn ưu điểm (Pha lê Bohemia/Rona, bảo hành vỡ hỏng).
+          - Đưa link danh mục tương ứng dưới dạng nút bấm: [Xem bộ sưu tập sản phẩm](Link).
+          - Nếu khách nói "Có", "Đúng rồi", "Ok" hãy xem câu trước đó mình đã gợi ý gì để đưa link chính xác.
+          - Tuyệt đối không dẫn về trang chủ nếu đã xác định được nhu cầu.`
         },
+        // Chèn lịch sử chat vào đây để AI nhớ nội dung cũ
         ...(history || []), 
         { role: "user", content: message }
       ]
@@ -64,7 +82,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ reply: completion.choices[0].message.content });
 
   } catch (err) {
-    return res.status(200).json({ reply: "Hương Lan đang hỗ trợ khách khác, Duy nhắn Zalo để mình hỗ trợ ngay nhé!" });
+    return res.status(200).json({ reply: "Hương Lan đang kiểm tra kho hàng, Duy nhắn Zalo để mình hỗ trợ ngay nhé!" });
   }
 }
 
