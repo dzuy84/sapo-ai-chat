@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
 
   try {
-    const { message, context, ip } = req.body || {};
+    const { message, context, ip } = req.body || {}; // Biến context nhận từ Giao diện Sapo
     const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
     const today = now.toLocaleDateString('vi-VN');
     const currentHour = now.getHours();
@@ -33,10 +33,12 @@ export default async function handler(req, res) {
     let products = [];
     try {
       const auth = Buffer.from(`${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`).toString("base64");
-      const sapoRes = await fetch(`https://${process.env.SAPO_STORE_ALIAS}.mysapo.net/admin/products.json?limit=150&fields=title,variants,alias`, { headers: { Authorization: `Basic ${auth}` } });
+      // Thêm trường product_type để AI có thêm dữ liệu tóm tắt chuyên sâu
+      const sapoRes = await fetch(`https://${process.env.SAPO_STORE_ALIAS}.mysapo.net/admin/products.json?limit=150&fields=title,variants,alias,product_type`, { headers: { Authorization: `Basic ${auth}` } });
       const data = await sapoRes.json();
       products = (data.products || []).map(p => ({ 
         name: p.title, 
+        type: p.product_type,
         url: `https://lyuongruouvang.com/products/${p.alias}` 
       }));
     } catch (e) {}
@@ -46,30 +48,33 @@ export default async function handler(req, res) {
     }
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    
+    // Xử lý logic tin nhắn gửi đi
+    let userContent = message;
+    if (context) {
+      userContent = `Tôi đang quan tâm đến sản phẩm: ${context}. Nếu tôi yêu cầu tóm tắt, hãy dựa vào danh sách sản phẩm bạn có để trả lời chuyên nghiệp nhất. Câu hỏi của tôi là: ${message}`;
+    }
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.4,
       messages: [
         {
           role: "system",
-          content: `Bạn là  Hương Lan - Sommelier cao cấp tại RONA.
+          content: `Bạn là Hương Lan - Sommelier cao cấp tại RONA.
           
-          NGÔN NGỮ (LANGUAGE):
-          - Nếu khách hỏi tiếng Việt: Trả lời bằng tiếng Việt sang trọng, lịch sự.
-          - If the customer speaks English: Reply in sophisticated, high-end English.
-          
-          PHONG CÁCH TƯ VẤN:
-          1. Kiến thức: Am hiểu sâu về pha lê Bohemia (Tiệp Khắc) - độ trong suốt, tiếng vang ngân.
-          2. Kiến thức: Am hiểu sâu về pha lê Rona (Slovakia) - độ trong suốt, tiếng vang ngân.
-          3. Kịch bản: Phân biệt ly Bordeaux/Burgundy, cam kết bảo hành vỡ hỏng 1-đổi-1 khi vận chuyển.
-          4. Kịch bản: Phân biệt champagne, cam kết bảo hành vỡ hỏng 1-đổi-1 khi vận chuyển.
-          5. ĐỊNH DẠNG: 
-             - Dùng thẻ <a> cho sản phẩm: <a href="URL" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Tên Sản Phẩm / Product Name</a>.
-             - Điều hướng Zalo/WhatsApp: <a href="https://zalo.me/0963111234" style="color:#0068ff; font-weight:bold;">Chat Zalo/WhatsApp với Glas</a>.
-          
-          DANH SÁCH SẢN PHẨM: ${JSON.stringify(products)}`
+          NHIỆM VỤ TÓM TẮT:
+          - Khi khách nhấp vào sản phẩm hoặc hỏi về sản phẩm cụ thể, hãy lục trong DANH SÁCH SẢN PHẨM.
+          - Tóm tắt ngắn gọn: Tên, loại ly (đỏ/trắng/champagne), đặc điểm pha lê (Tiệp Khắc/Slovakia) và bảo hành 1-đổi-1.
+          - Luôn giữ phong thái sang trọng, am hiểu.
+
+          DANH SÁCH SẢN PHẨM ĐỂ TRA CỨU: ${JSON.stringify(products)}
+
+          NGÔN NGỮ & PHONG CÁCH:
+          - Tiếng Việt lịch sự hoặc Tiếng Anh tinh tế tùy khách.
+          - ĐỊNH DẠNG: Thẻ <a> cho link sản phẩm và Zalo.`
         },
-        { role: "user", content: message }
+        { role: "user", content: userContent }
       ]
     });
 
