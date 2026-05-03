@@ -3,6 +3,27 @@ import nodemailer from "nodemailer";
 
 let stats = { totalVisits: 0, uniqueIPs: new Set(), recentQuestions: [], lastEmailSentDay: null };
 
+// ✅ THÊM HÀM NÀY
+function detectSearchKeyword(text) {
+  if (!text) return null;
+  const lower = text.toLowerCase().trim();
+
+  // bắt dạng 650ml
+  const mlMatch = lower.match(/(\d+)\s?ml/);
+  if (mlMatch) return mlMatch[1];
+
+  // bắt số đơn giản: 650
+  if (/^\d{3,4}$/.test(lower)) return lower;
+
+  // keyword phổ biến
+  if (lower.includes("bia")) return "ly bia";
+  if (lower.includes("vang")) return "ly vang";
+  if (lower.includes("whisky")) return "ly whisky";
+  if (lower.includes("champagne")) return "ly champagne";
+
+  return null;
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -26,6 +47,20 @@ export default async function handler(req, res) {
       sendReportEmail(stats, today).catch(e => {});
     }
 
+    // ✅ THÊM LOGIC SEARCH Ở ĐÂY
+    const keyword = detectSearchKeyword(message);
+
+    if (keyword) {
+      return res.status(200).json({
+        reply: `Dạ bên em có rất nhiều mẫu phù hợp ạ 🍷
+
+👉 Anh/Chị xem nhanh tại đây:
+https://lyuongruouvang.com/search?query=${encodeURIComponent(keyword)}
+
+Anh/Chị bấm vào sẽ thấy toàn bộ sản phẩm đúng nhu cầu nhé!`
+      });
+    }
+
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     
     const completion = await openai.chat.completions.create({
@@ -36,40 +71,32 @@ export default async function handler(req, res) {
           role: "system",
           content: `Bạn là Hương Lan - Sommelier tại RONA (lyuongruouvang.com). Bạn là chuyên gia tư vấn pha lê Bohemia (Tiệp), Rona (Slovakia) và đồ sứ cao cấp.
 
-KIẾN THỨC MẶC ĐỊNH CỦA SHOP:
-- Luôn có sẵn các dung tích: 350ml, 450ml, 550ml, 650ml, 750ml, 850ml
+          KIẾN THỨC MẶC ĐỊNH CỦA SHOP (KHẲNG ĐỊNH CÓ HÀNG):
+          - Shop LUÔN CÓ sẵn các dòng ly vang dung tích: 350ml, 450ml, 550ml, 650ml, 750ml, 850ml.
+          - Khi khách hỏi các dung tích này, PHẢI khẳng định: "Dạ bên em luôn sẵn hàng các dòng ly [Dung tích] cao cấp chính hãng Tiệp Khắc ạ".
 
-QUY TẮC QUAN TRỌNG (SEARCH):
-- Nếu khách hỏi dung tích (ví dụ: 650ml, 750ml...) hoặc từ khóa sản phẩm
-- LUÔN tạo link dạng:
-👉 https://lyuongruouvang.com/search?query=tukhoa
-- Trả về dạng:
-[Xem sản phẩm phù hợp](https://lyuongruouvang.com/search?query=650)
+          THÔNG TIN TRANG KHÁCH ĐANG XEM (CONTEXT):
+          "${context || "Khách đang ở trang chủ hoặc danh mục"}"
 
-- KHÔNG nói chung chung → phải đưa link để khách bấm
+          QUY TẮC ÉP BUỘC:
+          - Luôn điều hướng khách về link sản phẩm khi có thể.
+          - Không trả lời chung chung khi có thể tìm kiếm.
 
-CONTEXT:
-"${context || "Khách đang ở trang chủ"}"
+          BẢN ĐỒ WEBSITE:
+          - Ly vang: https://lyuongruouvang.com/ly-ruou-vang
+          - Ly bia: https://lyuongruouvang.com/ly-bia
+          - Ly champagne: https://lyuongruouvang.com/ly-champagne
+          - Ly whisky: https://lyuongruouvang.com/ly-whiskey
 
-PHẢN HỒI:
-- Luôn tự nhiên, bán hàng tốt, dẫn link rõ ràng`
+          QUY TẮC:
+          - Luôn lễ phép, xưng hô Anh/Chị.`
         },
         ...(history || []), 
         { role: "user", content: message }
       ]
     });
 
-    let reply = completion.choices[0].message.content;
-
-    // ====== 🔥 AUTO THÊM LINK SEARCH (QUAN TRỌNG) ======
-    const match = message.match(/(\d{3,4})\s?ml|\b(\d{3,4})\b/);
-    if (match) {
-      const keyword = match[1] || match[2];
-      reply += `\n👉 <a href="https://lyuongruouvang.com/search?query=${keyword}" target="_self">Xem tất cả mẫu ${keyword}ml tại đây</a>`;
-    }
-    // ==================================================
-
-    return res.status(200).json({ reply });
+    return res.status(200).json({ reply: completion.choices[0].message.content });
 
   } catch (err) {
     return res.status(200).json({ reply: "Hương Lan đang kiểm tra kho hàng, Duy nhắn Zalo để mình hỗ trợ ngay nhé!" });
