@@ -9,41 +9,46 @@ app.use(express.json());
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 app.post('/chat', async (req, res) => {
-  // Sếp thêm cái "context" vào đây để nhận dữ liệu từ website gửi sang
   const { message, history = [], context = "" } = req.body;
   
   try {
     const sapoAlias = process.env.SAPO_STORE_ALIAS; 
     const sapoToken = process.env.SAPO_API_SECRET; 
 
-    // 1. Tìm sản phẩm trong kho Sapo dựa trên tin nhắn của khách
-    const sapoRes = await fetch(
-      `https://${sapoAlias}.mysapo.net/admin/products/search.json?query=${encodeURIComponent(message)}&limit=3`,
-      { headers: { "X-Sapo-Access-Token": sapoToken, "Content-Type": "application/json" } }
-    );
+    // 1. Tối ưu tìm kiếm: Lấy top 5 sản phẩm mới nhất nếu tìm kiếm theo từ khóa không ra
+    // Điều này giúp AI luôn có dữ liệu thật để "nhìn" vào
+    const searchUrl = `https://${sapoAlias}.mysapo.net/admin/products.json?title=${encodeURIComponent(message)}&limit=5`;
+    
+    const sapoRes = await fetch(searchUrl, { 
+      headers: { "X-Sapo-Access-Token": sapoToken, "Content-Type": "application/json" } 
+    });
     const sapoData = await sapoRes.json();
     let productContext = "";
 
     if (sapoData.products && sapoData.products.length > 0) {
-      productContext = "DỮ LIỆU KHO RONA (ƯU TIÊN):\\n" + sapoData.products.map(p => 
-        `- ${p.title}: ${Number(p.variants[0].price).toLocaleString('vi-VN')}đ. Link: https://lyuongruouvang.com/products/${p.handle}`
-      ).join("\\n");
+      productContext = "DANH SÁCH SẢN PHẨM THẬT TẠI KHO RONA:\\n" + sapoData.products.map(p => {
+        const price = p.variants && p.variants[0] ? Number(p.variants[0].price).toLocaleString('vi-VN') : "Liên hệ";
+        return `- ${p.title}: ${price}đ. Link: https://lyuongruouvang.com/products/${p.handle}`;
+      }).join("\\n");
     } else {
-      productContext = "Không tìm thấy trong tìm kiếm nhanh. Hãy kiểm tra thông tin trang hiện tại.";
+      productContext = "Không tìm thấy sản phẩm khớp hoàn toàn trong tìm kiếm nhanh.";
     }
 
-    // 2. Kết hợp với thông tin sản phẩm khách đang xem (Context từ web gửi sang)
-    const finalSystemPrompt = `Bạn là Hương Lan - Chuyên gia Sommelier của RONA.
-    NHIỆM VỤ: Tư vấn đẳng cấp về pha lê Bohemia và Rona.
+    // 2. Thiết lập tính cách Sommelier đẳng cấp cho Hương Lan
+    const finalSystemPrompt = `Bạn là Hương Lan - Chuyên gia Sommelier tư vấn pha lê RONA.
+    NHIỆM VỤ: Tư vấn các dòng ly vang, bình thở (decanter) Bohemia và Rona.
     
-    NGỮ CẢNH TRANG HIỆN TẠI: ${context}
+    DỮ LIỆU TỪ KHO HÀNG (DÙNG ĐỂ BÁO GIÁ):
+    ${productContext}
     
-    DỮ LIỆU KHO HÀNG: ${productContext}
+    THÔNG TIN TRANG KHÁCH ĐANG XEM:
+    ${context}
     
-    QUY TẮC:
-    1. Chỉ dùng Link và Giá từ dữ liệu thật phía trên. Không tự bịa link.
-    2. Nếu khách hỏi về sản phẩm họ đang xem (trong Ngữ cảnh trang), hãy tư vấn sâu dựa trên mô tả đó.
-    3. Nếu không có hàng, dẫn khách về: https://lyuongruouvang.com/collections/all`;
+    QUY TẮC BẮT BUỘC:
+    1. Tuyệt đối không được bịa giá (như 456k hay bất kỳ giá nào khác). Nếu không thấy giá trong dữ liệu kho, hãy nói "Duy hãy nhắn tin để em báo giá chính xác nhất".
+    2. Nếu có sản phẩm trong kho, trình bày theo dạng: Tên sản phẩm - Giá - Link mua hàng.
+    3. Trả lời lịch sự, tinh tế theo phong cách thưởng thức rượu vang cao cấp.
+    4. Nếu khách hỏi chung chung, mời xem bộ sưu tập: https://lyuongruouvang.com/collections/all`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -52,14 +57,15 @@ app.post('/chat', async (req, res) => {
         ...history, 
         { role: "user", content: message }
       ],
+      temperature: 0.7 // Giúp AI trả lời tự nhiên hơn
     });
 
     res.json({ reply: response.choices[0].message.content });
   } catch (error) { 
     console.error("Lỗi:", error);
-    res.status(500).json({ reply: "Hương Lan đang kiểm tra lại kho, Duy chờ em tí nhé!" }); 
+    res.status(500).json({ reply: "Duy ơi, em đang kiểm tra lại kho một chút, sếp chờ em tí nhé!" }); 
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server RONA chạy tại port ${PORT}`));
+app.listen(PORT, () => console.log(`Server RONA Live tại port ${PORT}`));
