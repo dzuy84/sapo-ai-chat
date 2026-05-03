@@ -1,126 +1,220 @@
-import OpenAI from "openai";
-import nodemailer from "nodemailer";
+{% assign variantcount = product.variants | size %}
+{% assign on_var = false %}
+{% if variantcount > 1 %}
+{% assign on_var = true %}
+{% endif %}
+{%assign contacts = false%}
+{%if product.price == 0 %}
+{%assign contacts = true%}
+{%endif%}
 
-let stats = { totalVisits: 0, uniqueIPs: new Set(), recentQuestions: [], lastEmailSentDay: null };
+{% include 'breadcrumb' %}
+<section class="product" itemscope itemtype="http://schema.org/product">	
+	<meta itemprop="url" content="{{ store.url }}{{ product.url }}">
+	<meta itemprop="image" content="{{ product.featured_image.src | img_url: 'grande' }}">
+	<meta itemprop="description" content="{{ product.summary_or_content | strip_html | truncate: 300 }}">
+	<meta itemprop="name" content="{{ product.name }}">
+	<meta itemprop="releaseDate" content="{{product.created_on | date: "%y-%m-%d"}}">
 
-export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.status(200).end();
+	<div class="container">
+		<div class="row">
+			<div class="col-lg-12 col-md-12 details-product">
+				<div class="row product-bottom">
+					<div class="clearfix padding-bottom-10">
+						<div class="col-xs-12 col-sm-6 {% if settings.product_policy %}col-lg-5 col-md-4{% else %}col-lg-5 col-md-6{% endif %}">
+							<div class="relative product-image-block {% if product.images.size < 2  %}no-thum{%endif%}">
+								<div class="large-image">
+									<a {%if settings.product_lightbox_enable%}href="{{ product.featured_image.src | img_url:'1024x1024' }}" data-rel="prettyPhoto[product-gallery]"{%endif %} class="large_image_url">
+										<img id="zoom_01" src="{{ product.featured_image.src }}" alt="{{ product.name }}" class="img-responsive center-block">
+									</a>							
+								</div>	
+								{%if product.images.size > 1%}
+								<div id="gallery_01" class="owl-carousel owl-theme thumbnail-product margin-top-15" data-lg-items="5" data-md-items="5" data-sm-items="4" data-xs-items="4" data-margin="10" data-nav="true">
+									{% for image in product.images %}
+									<div class="item">
+										<a class="thumb-link" href="javascript:void(0);" data-image="{{ image.src }}" data-zoom-image="{{ image.src | img_url:'1024x1024' }}">
+											<img src="{{ image.src | img_url:'small' }}" alt="{{ product.name }}">
+										</a>
+									</div>
+									{% endfor %}
+								</div>
+								{%endif%}
+							</div>
+						</div>
 
-  try {
-    const { message, history, context, ip } = req.body || {}; 
-    const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
-    const today = now.toLocaleDateString('vi-VN');
-    const currentHour = now.getHours();
+						<div class="col-xs-12 col-sm-6 {% if settings.product_policy %}col-lg-4 col-md-5{% else %}col-lg-7 col-md-6{% endif %} details-pro">
+							<div class="product-top clearfix">
+								<h1 class="title-head">{{ product.name }}</h1>
+								
+								<div class="price-box clearfix">
+									{% if contacts %}
+										<div class="special-price"><span class="price product-price">Liên hệ</span></div>
+									{% else %}
+										<span class="special-price">
+											<span class="price product-price">{{ product.variants[0].price | money }}</span>
+										</span>
+										{% if product.variants[0].compare_at_price > product.variants[0].price %}
+											<span class="old-price">
+												<del class="price product-price-old">{{ product.variants[0].compare_at_price | money }}</del>
+											</span>
+										{% endif %}
+										{% if variantcount > 1 %}
+											<div style="color: #8b0000; font-weight: bold; font-size: 13px; margin-top:5px;">
+												Khoảng giá: {{ product.price_min | money }} - {{ product.price_max | money }}
+											</div>
+										{% endif %}
+									{% endif %}
+								</div>
+							</div>
 
-    if (message && message !== "111234") {
-      stats.totalVisits++;
-      if (ip) stats.uniqueIPs.add(ip);
-      stats.recentQuestions.push({ q: message, time: now.toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) });
-    }
+							<div class="inve_brand margin-top-10">
+								<strong>Thương hiệu:</strong> {{ product.vendor | default: 'Đang cập nhật' }}<br>
+								<strong>Tình trạng:</strong> {% if product.available %}Còn hàng{% else %}Hết hàng{% endif %}
+							</div>
 
-    if (currentHour >= 22 && stats.lastEmailSentDay !== today && stats.recentQuestions.length > 0) {
-      stats.lastEmailSentDay = today; 
-      sendReportEmail(stats, today).catch(e => {});
-    }
+							<div class="form-product margin-top-15">
+								<form enctype="multipart/form-data" id="add-to-cart-form" action="/cart/add" method="post" class="form-inline">
+									{% if variantcount > 1 %}
+										<select id="product-selectors" name="variantid" style="display:none">
+											{% for variant in product.variants %}
+											<option value="{{ variant.id }}">{{ variant.title }}</option>
+											{% endfor %}
+										</select>
+									{% else %}
+										<input type="hidden" name="variantid" value="{{ product.variants[0].id }}" />
+									{% endif %}
 
-    // ===============================
-    // 🔥 GỌI SAPO API TÌM SẢN PHẨM
-    // ===============================
+									<div class="form-group {%if contacts%}hidden{%endif%}">
+										<button type="submit" class="btn btn-lg btn-gray btn_buy">Mua ngay</button>
+									</div>
+									<button class="btn-callmeback" type="button" data-toggle="modal" data-target="#mymodalcall">
+										<i class="ion ion-ios-alarm"></i> Báo giá
+									</button>
+									<button class="btn-callmeback" type="button" onclick="window.location.href='tel:{{ store.phone_number | remove: ' '}}'">
+										<i class="ion ion-ios-call"></i> {{ store.phone_number }}
+									</button>
+								</form>
+							</div>
+						</div>
+						
+						{% if settings.product_policy %}
+						<div class="col-xs-12 col-sm-12 col-lg-3 col-md-3 hidden-sm hidden-xs">
+							{% include 'product-sidebar' %}
+						</div>
+						{% endif %}
+					</div>
+				</div>
+				
+				<div class="row margin-top-10">
+					<div class="col-md-9">
+						<div class="product-tab e-tabs padding-bottom-10">		
+							<div class="border-ghghg margin-bottom-20">
+								<ul class="tabs tabs-title clearfix">	
+									<li class="tab-link current" data-tab="tab-1"><h3><span>Mô tả</span></h3></li>																	
+								</ul>																									
+							</div>
+							<div id="tab-1" class="tab-content current">
+								<div class="rte">
+									{% if product.content != "" %}
+										{{ product.content }}
+									{% else %}
+										Nội dung đang được cập nhật...
+									{% endif %}
+								</div>
+							</div>	
+						</div>				
+					</div>
+					<div class="col-md-3">
+						<div class="right_module">
+							{% include 'sticky-product' %}
+							{% include 'similar-product' %}
+						</div>
+					</div>
+				</div>
 
-    let productHTML = "";
-    let searchLink = "";
+				{% if settings.product_recent_enable %}
+				{% assign check11 = product.url %}
+				{% assign productrelate = product.collections.last.alias %}
+				<div class="row margin-top-20 margin-bottom-10">
+					<div class="col-lg-12">
+						<div class="related-product">
+							<div class="home-title">
+								<h2><a href="/{{ productrelate }}">{{ settings.product_recent_title | default: 'Sản phẩm cùng loại' }}</a></h2>
+							</div>
+							<div class="section-tour-owl owl-carousel not-dqowl products-view-grid margin-top-10" data-md-items="5" data-sm-items="4" data-xs-items="2" data-margin="10">
+								{% for product in collections[productrelate].products limit: 10 %}
+									{% unless check11 == product.url %}
+									<div class="item">
+										{% include 'product-grid-item' %}
+									</div>
+									{% endunless %}
+								{% endfor %}
+							</div>
+						</div>
+					</div>
+				</div>					
+				{% endif %}
+			</div>
+		</div>
+	</div>
+</section>
 
-    if (message) {
-      const keyword = message.toLowerCase();
+<script>
+	$(document).ready(function() {
+		// Xử lý click ảnh thumbnail
+		$(document).on('click', '.thumb-link', function(e) {
+			e.preventDefault();
+			var newImg = $(this).attr('data-image');
+			var zoomImg = $(this).attr('data-zoom-image');
+			$('#zoom_01').attr('src', newImg);
+			$('.large_image_url').attr('href', zoomImg);
+		});
 
-      // link search web
-      searchLink = `https://lyuongruouvang.com/search?query=${encodeURIComponent(keyword)}`;
+		// Khởi tạo các thanh trượt (Owl Carousel)
+		$(".owl-carousel").each(function(){
+			$(this).owlCarousel({
+				loop: false,
+				margin: $(this).data('margin') || 10,
+				nav: true,
+				dots: false,
+				responsive: {
+					0: { items: $(this).data('xs-items') || 2 },
+					768: { items: $(this).data('sm-items') || 4 },
+					1024: { items: $(this).data('md-items') || 5 }
+				}
+			});
+		});
+	});
 
-      try {
-        const response = await fetch(
-          `https://${process.env.SAPO_STORE_ALIAS}.mysapo.net/admin/products.json?limit=5&title=${encodeURIComponent(keyword)}`,
-          {
-            headers: {
-              Authorization:
-                "Basic " +
-                Buffer.from(
-                  `${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`
-                ).toString("base64"),
-            },
-          }
-        );
+	var selectCallback = function(variant, selector) {
+		if (variant) {
+			var productPrice = $('.details-pro .product-price');
+			var comparePrice = $('.details-pro .product-price-old');
 
-        const data = await response.json();
+			if(variant.price > 0) {
+				productPrice.html(Bizweb.formatMoney(variant.price, "{{ store.money_format }}"));
+				if(variant.compare_at_price > variant.price) {
+					comparePrice.html(Bizweb.formatMoney(variant.compare_at_price, "{{ store.money_format }}")).show();
+				} else {
+					comparePrice.hide();
+				}
+			} else {
+				productPrice.html('Liên hệ');
+				comparePrice.hide();
+			}
 
-        if (data.products && data.products.length > 0) {
-          const items = data.products.slice(0, 5);
+			// Đổi ảnh khi chọn biến thể
+			if (variant.featured_image) {
+				$('#zoom_01').attr('src', variant.featured_image.src);
+			}
+		}
+	};
 
-          productHTML =
-            "<br/><b>🔎 Sản phẩm phù hợp:</b><br/>" +
-            items.map(p => 
-              `👉 <a href="https://lyuongruouvang.com/products/${p.handle}" target="_blank">${p.title}</a>`
-            ).join("<br/>");
-        }
-      } catch (e) {
-        console.log("Sapo API lỗi:", e);
-      }
-    }
-
-    // ===============================
-    // 🤖 GPT TRẢ LỜI NHƯ CŨ
-    // ===============================
-
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.1, 
-      messages: [
-        {
-          role: "system",
-          content: `Bạn là Hương Lan - Sommelier tại RONA.
-
-Luôn ưu tiên hướng khách đến link sản phẩm.`
-        },
-        ...(history || []), 
-        { role: "user", content: message }
-      ]
-    });
-
-    let reply = completion.choices[0].message.content;
-
-    // ===============================
-    // 🎯 GẮN SEARCH + SẢN PHẨM
-    // ===============================
-
-    reply += `<br/><br/>👉 Xem tất cả tại đây:<br/>
-    <a href="${searchLink}" target="_blank">${searchLink}</a>`;
-
-    if (productHTML) {
-      reply += `<br/>${productHTML}`;
-    }
-
-    return res.status(200).json({ reply });
-
-  } catch (err) {
-    return res.status(200).json({ reply: "Hương Lan đang kiểm tra kho hàng, Duy nhắn Zalo để mình hỗ trợ ngay nhé!" });
-  }
-}
-
-async function sendReportEmail(data, dateStr) {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return;
-  let transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS } });
-  const listHtml = data.recentQuestions.map(i => `<li><b>[${i.time}]</b>: ${i.q}</li>`).join("");
-  return transporter.sendMail({
-    from: `"RONA AI Report" <${process.env.EMAIL_USER}>`,
-    to: process.env.EMAIL_USER,
-    subject: `[BÁO CÁO RONA] ${dateStr}`,
-    html: `<div style="font-family:sans-serif; padding:20px; border:1px solid #8b0000; border-radius:10px;">
-           <h2 style="color:#8b0000;">Tổng kết chat ngày ${dateStr}</h2>
-           <p>Số khách IP khác nhau: <b>${data.uniqueIPs.size}</b></p>
-           <hr><ul>${listHtml}</ul></div>`
-  });
-}
+	{% if product.variants.size > 1 %}
+	new Bizweb.OptionSelectors('product-selectors', {
+		product: {{ product | json }},
+		onVariantSelected: selectCallback,
+		enableHistoryState: true
+	});
+	{% endif %}
+</script>
