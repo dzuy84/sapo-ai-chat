@@ -52,18 +52,20 @@ export default async function handler(req, res) {
     const botReply = response.choices[0].message.content;
     const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
     
-    if (now.getHours() >= 22 && dailyStats.lastSentDay !== today) {
+    // Gửi báo cáo vào 22h đêm
+    if (now.getHours() >= 22 && dailyStats.lastSentDay !== today && dailyStats.questions.length > 0) {
       await transporter.sendMail({
         from: process.env.EMAIL_USER,
         to: process.env.EMAIL_USER,
-        subject: `[RONA] Báo cáo ${today}`,
-        html: `<p>Khách: ${dailyStats.visitorIPs.size}</p><ul>${dailyStats.questions.map(q => `<li>${q}</li>`).join("")}</ul>`
+        subject: `[RONA] Báo cáo tình hình Chatbot ngày ${today}`,
+        html: `<p><b>Số khách truy cập:</b> ${dailyStats.visitorIPs.size}</p><ul>${dailyStats.questions.map(q => `<li>${q}</li>`).join("")}</ul>`
       });
       dailyStats.lastSentDay = today;
     }
 
     res.status(200).json({ reply: botReply });
   } catch (error) {
+    console.error("Lỗi:", error);
     res.status(500).json({ reply: "Hương Lan đang bận, sếp Duy kiểm tra lại nhé!" });
   }
 }
