@@ -1,75 +1,7 @@
 import OpenAI from "openai";
 import nodemailer from "nodemailer";
 
-// ===== 🔥 ENV =====
-const SAPO_TOKEN = process.env.SAPO_STOREFRONT_TOKEN;
-const STORE = process.env.SAPO_STORE_ALIAS;
-
 let stats = { totalVisits: 0, uniqueIPs: new Set(), recentQuestions: [], lastEmailSentDay: null };
-
-
-// ===== 🔥 DETECT KEYWORD =====
-function detectKeyword(msg) {
-  msg = msg.toLowerCase();
-
-  // bắt dung tích
-  const match = msg.match(/(\d+)\s?(ml|l|cc)?/);
-  if (match) {
-    let val = parseFloat(match[1]);
-
-    if (msg.includes("l") && val < 10) val = val * 1000;
-
-    return Math.round(val) + "ml";
-  }
-
-  if (msg.includes("vang đỏ")) return "vang đỏ";
-  if (msg.includes("vang trắng")) return "vang trắng";
-
-  return null;
-}
-
-
-// ===== 🔥 SEARCH SAPO =====
-async function searchProducts(keyword) {
-  try {
-    const res = await fetch(`https://${STORE}.com/api/storefront/graphql.json`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Sapo-Storefront-Access-Token": SAPO_TOKEN
-      },
-      body: JSON.stringify({
-        query: `
-        {
-          products(first: 5, query: "${keyword}") {
-            edges {
-              node {
-                name
-                handle
-                images(first:1){ edges{ node{ src } } }
-                variants(first:1){ edges{ node{ price } } }
-              }
-            }
-          }
-        }`
-      })
-    });
-
-    const json = await res.json();
-
-    return json.data.products.edges.map(p => ({
-      name: p.node.name,
-      url: "https://lyuongruouvang.com/products/" + p.node.handle,
-      image: p.node.images.edges[0]?.node.src,
-      price: p.node.variants.edges[0]?.node.price
-    }));
-
-  } catch (e) {
-    console.log("Search error:", e);
-    return [];
-  }
-}
-
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -79,7 +11,6 @@ export default async function handler(req, res) {
 
   try {
     const { message, history, context, ip } = req.body || {}; 
-
     const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
     const today = now.toLocaleDateString('vi-VN');
     const currentHour = now.getHours();
@@ -95,22 +26,8 @@ export default async function handler(req, res) {
       sendReportEmail(stats, today).catch(e => {});
     }
 
-    // ===== 🔥 SEARCH TRƯỚC =====
-    const keyword = detectKeyword(message);
-    if (keyword) {
-      const products = await searchProducts(keyword);
-
-      if (products.length > 0) {
-        return res.status(200).json({
-          action: "show_products",
-          products
-        });
-      }
-    }
-
-    // ===== 🤖 AI FALLBACK =====
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
+    
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.1, 
@@ -119,39 +36,50 @@ export default async function handler(req, res) {
           role: "system",
           content: `Bạn là Hương Lan - Sommelier tại RONA (lyuongruouvang.com). Bạn là chuyên gia tư vấn pha lê Bohemia (Tiệp), Rona (Slovakia) và đồ sứ cao cấp.
 
-KIẾN THỨC MẶC ĐỊNH:
-- Luôn có các dòng 350ml, 450ml, 550ml, 650ml, 750ml, 850ml
-- Luôn khẳng định có hàng
+KIẾN THỨC MẶC ĐỊNH CỦA SHOP:
+- Luôn có sẵn các dung tích: 350ml, 450ml, 550ml, 650ml, 750ml, 850ml
 
-Nguyên tắc:
-- Nếu không có dữ liệu sản phẩm → hướng dẫn khách bấm 🔍 tìm kiếm
-- Luôn kèm link danh mục phù hợp
-- Trả lời ngắn gọn, bán hàng, chuyên nghiệp`
+QUY TẮC QUAN TRỌNG (SEARCH):
+- Nếu khách hỏi dung tích (ví dụ: 650ml, 750ml...) hoặc từ khóa sản phẩm
+- LUÔN tạo link dạng:
+👉 https://lyuongruouvang.com/search?query=tukhoa
+- Trả về dạng:
+[Xem sản phẩm phù hợp](https://lyuongruouvang.com/search?query=650)
+
+- KHÔNG nói chung chung → phải đưa link để khách bấm
+
+CONTEXT:
+"${context || "Khách đang ở trang chủ"}"
+
+PHẢN HỒI:
+- Luôn tự nhiên, bán hàng tốt, dẫn link rõ ràng`
         },
         ...(history || []), 
         { role: "user", content: message }
       ]
     });
 
-    return res.status(200).json({ reply: completion.choices[0].message.content });
+    let reply = completion.choices[0].message.content;
+
+    // ====== 🔥 AUTO THÊM LINK SEARCH (QUAN TRỌNG) ======
+    const match = message.match(/(\d{3,4})\s?ml|\b(\d{3,4})\b/);
+    if (match) {
+      const keyword = match[1] || match[2];
+      reply += `\n👉 <a href="https://lyuongruouvang.com/search?query=${keyword}" target="_self">Xem tất cả mẫu ${keyword}ml tại đây</a>`;
+    }
+    // ==================================================
+
+    return res.status(200).json({ reply });
 
   } catch (err) {
     return res.status(200).json({ reply: "Hương Lan đang kiểm tra kho hàng, Duy nhắn Zalo để mình hỗ trợ ngay nhé!" });
   }
 }
 
-
-// ===== EMAIL REPORT =====
 async function sendReportEmail(data, dateStr) {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return;
-
-  let transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
-  });
-
+  let transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS } });
   const listHtml = data.recentQuestions.map(i => `<li><b>[${i.time}]</b>: ${i.q}</li>`).join("");
-
   return transporter.sendMail({
     from: `"RONA AI Report" <${process.env.EMAIL_USER}>`,
     to: process.env.EMAIL_USER,
