@@ -7,52 +7,45 @@ const transporter = nodemailer.createTransport({
   auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
 });
 
-let dailyStats = { questions: [], visitorIPs: new Set(), lastSentDay: null };
-
 export default async function handler(req, res) {
-  // Cho phép mọi nguồn truy cập để tránh lỗi CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Chấp nhận cả POST và GET để tránh lỗi 405
-  const message = req.body?.message || req.query?.message;
-  const history = req.body?.history || [];
-
+  const { message, history } = req.body;
   if (!message) return res.status(200).json({ reply: "Duy ơi, em nghe đây!" });
 
   try {
-    const today = new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-    dailyStats.questions.push(message);
-
-    const sapoAlias = process.env.SAPO_STORE_ALIAS;
+    const sapoAlias = process.env.SAPO_STORE_ALIAS; // ly-uong-ruou-vang
     const sapoApiKey = process.env.SAPO_API_KEY;
     const sapoApiSecret = process.env.SAPO_API_SECRET;
     
     let productContext = "";
     try {
-      const sapoRes = await fetch(`https://${sapoApiKey}:${sapoApiSecret}@${sapoAlias}.mysapo.net/admin/products/search.json?query=${encodeURIComponent(message)}&limit=3`);
+      // Tìm kiếm sản phẩm rộng hơn
+      const sapoRes = await fetch(`https://${sapoApiKey}:${sapoApiSecret}@${sapoAlias}.mysapo.net/admin/products.json?title=${encodeURIComponent(message)}&limit=3`);
       const sapoData = await sapoRes.json();
+      
       if (sapoData.products?.length > 0) {
-        productContext = sapoData.products.map(p => `Tên: ${p.title}, Giá: ${p.variants[0].price}đ, Link: https://${sapoAlias}.com/products/${p.handle}`).join("\n");
+        productContext = "Dưới đây là các mẫu phù hợp:\n" + sapoData.products.map(p => {
+          return `- ${p.title}: Giá ${p.variants[0].price}đ. Link: https://lyuongruouvang.com/products/${p.handle}`;
+        }).join("\n");
       }
-    } catch (e) { console.log("Sapo Error"); }
+    } catch (e) { console.log("Lỗi Sapo"); }
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: `Bạn là Hương Lan, chuyên gia Sommelier của RONA (lyuongruouvang.com). Tư vấn đẳng cấp về pha lê Bohemia và Rona. Sản phẩm: ${productContext}` },
+        { role: "system", content: `Bạn là Hương Lan, chuyên gia Sommelier của RONA. BẮT BUỘC: Khi có sản phẩm khách hỏi, bạn PHẢI gửi link và giá này cho khách: ${productContext}. Nếu không thấy sản phẩm cụ thể, hãy mời khách xem tại: https://lyuongruouvang.com/collections/all` },
         ...history,
         { role: "user", content: message },
       ],
     });
 
-    const botReply = response.choices[0].message.content;
-    res.status(200).json({ reply: botReply });
-
+    res.status(200).json({ reply: response.choices[0].message.content });
   } catch (error) {
-    res.status(500).json({ reply: "Hương Lan hơi mệt, Duy kiểm tra lại nhé!" });
+    res.status(500).json({ reply: "Hương Lan đang kiểm tra lại kho, Duy chờ em tí nhé!" });
   }
 }
