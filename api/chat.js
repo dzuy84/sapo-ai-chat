@@ -45,7 +45,7 @@ export default async function handler(req, res) {
              - Ly vang đỏ: https://lyuongruouvang.com/ly-uong-vang-do
              - Ly vang trắng: https://lyuongruouvang.com/ly-vang-trang
              - Ly vang ngọt: https://lyuongruouvang.com/ly-uong-vang-ngot
-             - Ly Champagne/Flute: https://lyuongruouvang.com/ly-champagne-flute
+             - Ly Champagne/Flute: https://lyuongruouvang.com/ly-champagne
              - Ly rượu mạnh/Brandy/Cognac: https://lyuongruouvang.com/ly-brandy-cognac
              - Ly Whiskey: https://lyuongruouvang.com/ly-whiskey
              - Ly Bia: https://lyuongruouvang.com/ly-bia
