@@ -1,58 +1,45 @@
 const { OpenAI } = require("openai");
-const nodemailer = require("nodemailer");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
-let dailyStats = { questions: [], visitorIPs: new Set(), lastSentDay: null };
-
 module.exports = async (req, res) => {
+  // CORS - Giúp chat chạy trên web lyuongruouvang.com không bị chặn
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { message, history = [], ip } = req.body;
-  const today = new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+  const { message, history = [] } = req.body;
 
   try {
-    if (message) {
-      dailyStats.questions.push(message);
-      if (ip) dailyStats.visitorIPs.add(ip);
-    }
-
-    // LẤY DỮ LIỆU SAPO (Dùng Access Token cho an toàn)
     const sapoAlias = process.env.SAPO_STORE_ALIAS; // ly-uong-ruou-vang
-    const sapoToken = process.env.SAPO_API_SECRET; // Mã shpat_... hoặc 07c03d...
-    
+    const sapoToken = process.env.SAPO_API_SECRET; // Mã token 07c03d...
+
     let productContext = "";
     try {
-      const sapoRes = await fetch(`https://${sapoAlias}.mysapo.net/admin/products/search.json?query=${encodeURIComponent(message)}&limit=3`, {
-        headers: {
-          "X-Sapo-Access-Token": sapoToken,
-          "Content-Type": "application/json"
+      // Tìm kiếm sản phẩm (Search API của Sapo ổn định hơn tìm theo Title)
+      const sapoRes = await fetch(
+        `https://${sapoAlias}.mysapo.net/admin/products/search.json?query=${encodeURIComponent(message)}&limit=3`,
+        {
+          headers: {
+            "X-Sapo-Access-Token": sapoToken,
+            "Content-Type": "application/json"
+          }
         }
-      });
+      );
       const sapoData = await sapoRes.json();
-      
+
       if (sapoData.products && sapoData.products.length > 0) {
-        productContext = "Sản phẩm thực tế trong kho RONA:\n" + sapoData.products.map(p => {
-          const price = p.variants[0]?.price ? Number(p.variants[0].price).toLocaleString("vi-VN") + "đ" : "Liên hệ";
-          return `- ${p.title}: Giá ${price}. Link: https://lyuongruouvang.com/products/${p.handle}`;
-        }).join("\n");
+        productContext = "DỮ LIỆU KHO HÀNG THẬT (PHẢI DÙNG GIÁ VÀ LINK NÀY):\\n" + 
+          sapoData.products.map(p => {
+            const price = p.variants[0]?.price ? Number(p.variants[0].price).toLocaleString("vi-VN") + "đ" : "Liên hệ";
+            return `- ${p.title}\\n  Giá: ${price}\\n  Link: https://lyuongruouvang.com/products/${p.handle}`;
+          }).join("\\n\\n");
       } else {
-        productContext = "Không tìm thấy. Dẫn khách xem: https://lyuongruouvang.com/collections/all";
+        productContext = "KHÔNG TÌM THẤY SẢN PHẨM. Chỉ được phép dẫn khách về: https://lyuongruouvang.com/collections/all";
       }
     } catch (e) {
-      productContext = "Lỗi kết nối Sapo.";
+      productContext = "Lỗi kết nối kho. Dẫn khách về trang chủ: https://lyuongruouvang.com";
     }
 
     const response = await openai.chat.completions.create({
@@ -60,33 +47,18 @@ module.exports = async (req, res) => {
       messages: [
         { 
           role: "system", 
-          content: `Bạn là Hương Lan, chuyên gia RONA. BẮT BUỘC: Chỉ dùng link/giá từ kho: ${productContext}. Không tự chế link.` 
+          content: `Bạn là Hương Lan - chuyên gia tư vấn pha lê RONA. 
+          QUY TẮC: Chỉ được dùng thông tin sản phẩm trong dữ liệu sau: ${productContext}. 
+          Nếu dữ liệu ghi 'Không tìm thấy', tuyệt đối không được tự bịa tên ly hay giá tiền.` 
         },
         ...history,
         { role: "user", content: message },
       ],
     });
 
-    const botReply = response.choices[0].message.content;
-
-    // BÁO CÁO 22H
-    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
-    if (now.getHours() >= 22 && dailyStats.lastSentDay !== today && dailyStats.questions.length > 0) {
-      try {
-        await transporter.sendMail({
-          from: process.env.EMAIL_USER,
-          to: process.env.EMAIL_USER,
-          subject: `[RONA] Báo cáo ngày ${today}`,
-          html: `<h3>Tổng kết:</h3><p>Khách: ${dailyStats.visitorIPs.size}</p><ul>${dailyStats.questions.map(q => `<li>${q}</li>`).join("")}</ul>`
-        });
-        dailyStats.lastSentDay = today;
-        dailyStats.questions = [];
-      } catch (mE) {}
-    }
-
-    res.status(200).json({ reply: botReply });
+    res.status(200).json({ reply: response.choices[0].message.content });
 
   } catch (error) {
-    res.status(500).json({ reply: "Duy ơi, hệ thống đang bảo trì tí nhé!" });
+    res.status(500).json({ reply: "Hương Lan đang cập nhật kho hàng, Duy chờ em tí nhé!" });
   }
 };
