@@ -49,13 +49,13 @@ module.exports = async (req, res) => {
           Khách hàng đang đứng tại trang web có tiêu đề/đường link là: "${context || 'Trang chủ hoặc không rõ'}"
           👉 Nếu khách hỏi "sản phẩm này", "ly này", "cái này" bao nhiêu ml, giá bao nhiêu... Bạn PHẢI tự động hiểu họ đang hỏi về sản phẩm nằm trong đường link/tiêu đề trang web đó để trả lời cho chính xác.
 
-          PHONG CÁCH TƯ VẤN: Lịch sự, tự nhiên, sang trọng và có tâm (Dùng "Duy", "anh/chị"). 
+          PHONG CÁCH TƯ VẤN: Lịch sự, tự nhiên, sang trọng và có tâm (Dùng "Em", "anh/chị"). 
           - NẾU KHÁCH HỎI KIẾN THỨC BẤT KỲ (dung tích, kích thước, xuất xứ...): BẮT BUỘC giải đáp ngắn gọn 1-2 câu đúng chuyên môn trước.
           
           SAU ĐÓ, BẮT BUỘC TRẢ LỜI THEO CẤU TRÚC 3 PHẦN:
           1. Link Sản phẩm/Tìm kiếm: 
              - Nếu khách hỏi sản phẩm cụ thể và có trong danh sách: <a href="URL" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Tên Sản Phẩm</a>.
-             - Nếu không có: <a href="https://lyuongruouvang.com/search?query=${encodeURIComponent(message)}" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Duy mời anh/chị xem thêm các mẫu "${message}" tại đây nhé</a>.
+             - Nếu không có: <a href="https://lyuongruouvang.com/search?query=${encodeURIComponent(message)}" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Em mời anh/chị xem thêm các mẫu "${message}" tại đây nhé</a>.
           
           2. Các sản phẩm cùng loại (Dựa vào ý khách hỏi, CHỌN 1 LINK ĐÚNG NHẤT):
              - Ly vang đỏ: <br>🍷 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-uong-vang-do" style="color:#8b0000; font-weight:bold;">Danh mục Ly Vang Đỏ</a>
@@ -72,7 +72,7 @@ module.exports = async (req, res) => {
              - Quà tặng: <br>🎁 Khám phá thêm: <a href="https://lyuongruouvang.com/bo-qua-tang" style="color:#8b0000; font-weight:bold;">Gợi ý Bộ Quà Tặng Pha Lê</a>
              - Mặc định nếu hỏi chung chung: <br>💎 Khám phá thêm: <a href="https://lyuongruouvang.com/pha-le-chau-au-cao-cap" style="color:#8b0000; font-weight:bold;">Pha Lê Châu Âu Cao Cấp</a>
 
-          3. Câu chốt Zalo: <br><a href="https://zalo.me/0963111234" style="color:#0068ff; font-weight:bold;">👉 Cần tư vấn kỹ hơn, anh/chị nhắn Zalo cho Duy nhé!</a>
+          3. Câu chốt Zalo: <br><a href="https://zalo.me/0963111234" style="color:#0068ff; font-weight:bold;">👉 Cần tư vấn kỹ hơn, anh/chị nhắn Zalo cho Em nhé!</a>
 
           DATA: ${JSON.stringify(products)}`
         },
@@ -82,6 +82,6 @@ module.exports = async (req, res) => {
 
     return res.status(200).json({ reply: completion.choices[0].message.content });
   } catch (err) {
-    return res.status(200).json({ reply: "Dạ Duy đang bận chút xíu, anh/chị nhắn Zalo Duy tư vấn ngay nhé! <br><a href='https://zalo.me/0963111234' style='color:#0068ff; font-weight:bold;'>👉 Chat Zalo Duy</a>" });
+    return res.status(200).json({ reply: "Dạ em đang bận chút xíu, anh/chị nhắn Zalo Em tư vấn ngay nhé! <br><a href='https://zalo.me/0963111234' style='color:#0068ff; font-weight:bold;'>👉 Chat Zalo Em</a>" });
   }
 };
