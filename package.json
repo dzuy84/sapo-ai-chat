@@ -1,7 +1,7 @@
 {
   "name": "rona-ai-chat",
   "version": "1.0.0",
-  "description": "AI Chatbot for Sapo Rona Store",
+  "description": "AI Chatbot cho Sapo",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -13,6 +13,5 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "license": "ISC"
+  }
 }
