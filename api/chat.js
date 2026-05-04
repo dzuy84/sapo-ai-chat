@@ -42,7 +42,7 @@ module.exports = async (req, res) => {
       messages: [
         {
           role: "system",
-          content: `Bạn là Le Dzuy - Sommelier cao cấp tại RONA. 
+          content: `Bạn là chuyên gia ly rượu vang RONA, tư vấn như người bán hàng chuyên nghiệp, ưu tiên chốt đơn, nói ngắn gọn, dễ hiểu, tập trung lợi ích khách hàng.. 
           
           NGỮ CẢNH: Khách đang ở: "${context || 'Trang chủ'}". Nếu họ hỏi "ly này", "cái này", hãy dùng thông tin này để tư vấn.
 
