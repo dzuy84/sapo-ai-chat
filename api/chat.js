@@ -48,7 +48,8 @@ module.exports = async (req, res) => {
       // Mã hóa API Key và Secret thành chuỗi Base64 chuẩn của Sapo
       const auth = Buffer.from(`${sapoKey}:${sapoSecret}`).toString("base64");
       
-      const sapoRes = await fetch(`https://${sapoAlias}.mysapo.net/admin/products.json?limit=150&fields=title,variants,alias`, { 
+      // ĐÃ TĂNG GIỚI HẠN LÊN 250 SẢN PHẨM ĐỂ VÉT SÂU HƠN VÀO KHO
+      const sapoRes = await fetch(`https://${sapoAlias}.mysapo.net/admin/products.json?limit=250&fields=title,variants,alias`, { 
         headers: { 
           "Authorization": `Basic ${auth}`,
           "Content-Type": "application/json"
@@ -81,7 +82,8 @@ module.exports = async (req, res) => {
              - Nếu khách lo vỡ: Cam kết bảo hành 1 đổi 1 khi vận chuyển.
              - Nếu khách hỏi xuất xứ: Khẳng định 100% nhập khẩu từ Tiệp Khắc/Slovakia (CO/CQ đầy đủ).
           4. ĐỊNH DẠNG BẮT BUỘC:
-             - PHẢI dùng thẻ <a> cho sản phẩm: <a href="URL" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Tên Sản Phẩm</a>.
+             - TRƯỜNG HỢP CÓ SẢN PHẨM TRONG DANH SÁCH: PHẢI dùng thẻ <a> cho sản phẩm: <a href="URL" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Tên Sản Phẩm</a>.
+             - TRƯỜNG HỢP KHÔNG THẤY TRONG DANH SÁCH: TUYỆT ĐỐI KHÔNG được nói "chưa có thông tin". Khéo léo tạo link tìm kiếm tự động cho khách bằng thẻ <a> như sau: <a href="https://lyuongruouvang.com/search?query=TỪ_KHÓA_KHÁCH_HỎI" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Xem ngay các mẫu TỪ_KHÓA_KHÁCH_HỎI tại đây</a>.
              - Luôn điều hướng về Zalo Duy: <a href="https://zalo.me/0963111234" style="color:#0068ff; font-weight:bold;">Chat Zalo với Duy ngay</a>.
           
           DANH SÁCH SẢN PHẨM HIỆN CÓ: ${JSON.stringify(products)}`
