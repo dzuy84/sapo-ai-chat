@@ -57,7 +57,7 @@ module.exports = async (req, res) => {
              - Nếu khách hỏi sản phẩm cụ thể và có trong danh sách: <a href="URL" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Tên Sản Phẩm</a>.
              - Nếu không có: <a href="https://lyuongruouvang.com/search?query=${encodeURIComponent(message)}" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Duy mời anh/chị xem thêm các mẫu "${message}" tại đây nhé</a>.
           
-          2. Link Danh mục tương ứng (Dựa vào ý khách hỏi, CHỌN 1 LINK ĐÚNG NHẤT):
+          2. Các sản phẩm cùng loại (Dựa vào ý khách hỏi, CHỌN 1 LINK ĐÚNG NHẤT):
              - Ly vang đỏ: <br>🍷 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-uong-vang-do" style="color:#8b0000; font-weight:bold;">Danh mục Ly Vang Đỏ</a>
              - Ly vang trắng: <br>🍷 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-vang-trang" style="color:#8b0000; font-weight:bold;">Danh mục Ly Vang Trắng</a>
              - Ly vang ngọt: <br>🍷 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-uong-vang-ngot" style="color:#8b0000; font-weight:bold;">Danh mục Ly Vang Ngọt</a>
