@@ -38,7 +38,7 @@ module.exports = async (req, res) => {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.6, // Tăng nhẹ để câu chữ mượt mà, dẻo miệng hơn
+      temperature: 0.75, // Tăng nhẹ để câu chữ mượt mà, dẻo miệng hơn
       messages: [
         {
           role: "system",
