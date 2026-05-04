@@ -1,16 +1,14 @@
 const { OpenAI } = require("openai");
-const nodemailer = require("nodemailer");
 
-// Biến lưu trữ thống kê tạm thời trên Vercel
-let stats = { totalVisits: 0, uniqueIPs: new Set(), recentQuestions: [], lastEmailSentDay: null };
+// Biến lưu trữ thống kê tạm thời trên Vercel (Vẫn giữ để sếp check bằng lệnh Duy_Check_68)
+let stats = { totalVisits: 0, uniqueIPs: new Set(), recentQuestions: [] };
 
 module.exports = async (req, res) => {
-  // 1. CẤU HÌNH CORS TRỰC TIẾP (ĐẬP TAN CÁI LỖI ĐỎ TRÊN WEB SẾP VỪA CHỤP)
+  // 1. CẤU HÌNH CORS TRỰC TIẾP
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, POST, GET');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
 
-  // Xử lý bước kiểm tra an ninh (Preflight) của trình duyệt
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -22,10 +20,8 @@ module.exports = async (req, res) => {
     const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || "Unknown";
     
     const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
-    const today = now.toLocaleDateString('vi-VN');
-    const currentHour = now.getHours();
 
-    // Lưu thống kê
+    // Lưu thống kê vào bộ nhớ tạm
     if (message && message !== "Duy_Check_68") {
       stats.totalVisits++;
       if (ip && ip !== "Unknown") stats.uniqueIPs.add(ip);
@@ -36,15 +32,9 @@ module.exports = async (req, res) => {
       if (stats.recentQuestions.length > 50) stats.recentQuestions.shift();
     }
 
-    // Tự động gửi Email sau 22h
-    if (currentHour >= 22 && stats.lastEmailSentDay !== today && stats.recentQuestions.length > 0) {
-      stats.lastEmailSentDay = today; 
-      sendReportEmail(stats, today).catch(e => { stats.lastEmailSentDay = null; });
-    }
-
-    // Lệnh bí mật của Admin
+    // Lệnh bí mật của Admin - Xem trực tiếp trong khung chat
     if (message === "Duy_Check_68") {
-      return res.status(200).json({ reply: `📊 **ADMIN RONA BÁO CÁO**:\nHôm nay đã tiếp **${stats.uniqueIPs.size}** khách.\nEmail chi tiết sẽ được gửi tự động sau 22h!` });
+      return res.status(200).json({ reply: `📊 **ADMIN RONA BÁO CÁO**:\nHôm nay đã tiếp **${stats.uniqueIPs.size}** khách qua IP duy nhất.\nTổng số tương tác: ${stats.totalVisits}.` });
     }
 
     // Lấy dữ liệu kho từ Sapo
@@ -99,30 +89,6 @@ module.exports = async (req, res) => {
 
   } catch (err) {
     console.error("Lỗi Server:", err);
-    return res.status(200).json({ reply: "Duy đang bận phục vụ rượu cho khách, anh/chị nhắn Zalo Duy để được tư vấn ngay nhé! <br><a href='https://zalo.me/0963111234' style='color:#0068ff; font-weight:bold;'>👉 Chat Zalo với Duy</a>" });
+    return res.status(200).json({ reply: "Duy đang bận phục vụ rượu cho khách, anh/chị nhắn Zalo Duy tư vấn ngay nhé! <br><a href='https://zalo.me/0963111234' style='color:#0068ff; font-weight:bold;'>👉 Chat Zalo với Duy</a>" });
   }
 };
-
-// Hàm gửi Email (Không cần sửa)
-async function sendReportEmail(data, dateStr) {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return;
-  let transporter = nodemailer.createTransport({ 
-    service: 'gmail', 
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS } 
-  });
-  
-  const listHtml = data.recentQuestions.map(i => `<li><b>[${i.time}]</b>: ${i.q}</li>`).join("");
-  
-  return transporter.sendMail({
-    from: `"Trợ Lý RONA" <${process.env.EMAIL_USER}>`,
-    to: process.env.EMAIL_USER,
-    subject: `[BÁO CÁO RONA] Tổng kết ngày ${dateStr}`,
-    html: `<div style="font-family:sans-serif; padding:20px; border:1px solid #8b0000; border-radius: 8px;">
-           <h2 style="color:#8b0000;">Tổng kết tương tác ngày ${dateStr}</h2>
-           <p style="font-size: 16px;">🔹 Số lượng khách (IP duy nhất) đã chat: <b style="color:#8b0000; font-size:18px;">${data.uniqueIPs.size}</b></p>
-           <hr style="border: 0; border-top: 1px solid #eee;">
-           <p><b>Nội dung khách hàng quan tâm:</b></p>
-           <ul style="line-height: 1.6;">${listHtml}</ul>
-           </div>`
-  });
-}
