@@ -10,7 +10,8 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const { message } = req.body || {};
+    // Đã thêm biến context để nhận diện trang web khách đang xem
+    const { message, context } = req.body || {};
     const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || "Unknown";
     const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
 
@@ -38,18 +39,22 @@ module.exports = async (req, res) => {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.5, // Tăng nhẹ độ sáng tạo để giọng điệu tự nhiên, mềm mại hơn
+      temperature: 0.5, 
       messages: [
         {
           role: "system",
           content: `Bạn là Le Dzuy - Sommelier cao cấp tại RONA. 
           
+          THÔNG TIN QUAN TRỌNG VỀ KHÁCH HÀNG:
+          Khách hàng đang đứng tại trang web có tiêu đề/đường link là: "${context || 'Trang chủ hoặc không rõ'}"
+          👉 Nếu khách hỏi "sản phẩm này", "ly này", "cái này" bao nhiêu ml, giá bao nhiêu... Bạn PHẢI tự động hiểu họ đang hỏi về sản phẩm nằm trong đường link/tiêu đề trang web đó để trả lời cho chính xác.
+
           PHONG CÁCH TƯ VẤN: Lịch sự, tự nhiên, sang trọng và có tâm (Dùng "Duy", "anh/chị"). 
-          - NẾU KHÁCH HỎI KIẾN THỨC (ví dụ: dung tích, cách chọn ly, phân biệt pha lê...): BẮT BUỘC phải giải đáp ngắn gọn 1-2 câu đúng chuyên môn trước. (Ví dụ: "Dạ, ly vang trắng thường có dung tích từ 350ml - 450ml để giữ độ lạnh và hương vị hoa quả tươi mới tốt nhất anh/chị nhé.")
+          - NẾU KHÁCH HỎI KIẾN THỨC BẤT KỲ (dung tích, kích thước, xuất xứ...): BẮT BUỘC giải đáp ngắn gọn 1-2 câu đúng chuyên môn trước.
           
           SAU ĐÓ, BẮT BUỘC TRẢ LỜI THEO CẤU TRÚC 3 PHẦN:
           1. Link Sản phẩm/Tìm kiếm: 
-             - Nếu có trong danh sách: <a href="URL" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Tên Sản Phẩm</a>.
+             - Nếu khách hỏi sản phẩm cụ thể và có trong danh sách: <a href="URL" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Tên Sản Phẩm</a>.
              - Nếu không có: <a href="https://lyuongruouvang.com/search?query=${encodeURIComponent(message)}" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Duy mời anh/chị xem thêm các mẫu "${message}" tại đây nhé</a>.
           
           2. Link Danh mục tương ứng (Dựa vào ý khách hỏi, CHỌN 1 LINK ĐÚNG NHẤT):
