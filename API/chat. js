@@ -1,4 +1,3 @@
-
 const express = require('express');
 const cors = require('cors');
 const { OpenAI } = require("openai");
@@ -7,7 +6,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Khởi tạo OpenAI với Key sếp đã cài trong Environment Render
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 app.post('/chat', async (req, res) => {
@@ -17,45 +15,38 @@ app.post('/chat', async (req, res) => {
     const sapoAlias = process.env.SAPO_STORE_ALIAS; 
     const sapoToken = process.env.SAPO_API_SECRET; 
 
-    // 1. TÌM KIẾM SẢN PHẨM TỪ KHO SAPO
-    // Sử dụng endpoint products.json để lấy dữ liệu chính xác hơn search.json
+    // GỌI API SAPO TÌM SẢN PHẨM THEO TỪ KHÓA
     const searchUrl = `https://${sapoAlias}.mysapo.net/admin/products.json?query=${encodeURIComponent(message)}&limit=5`;
     
     const sapoRes = await fetch(searchUrl, { 
-      headers: { 
-        "X-Sapo-Access-Token": sapoToken, 
-        "Content-Type": "application/json" 
-      } 
+      headers: { "X-Sapo-Access-Token": sapoToken, "Content-Type": "application/json" } 
     });
 
     const sapoData = await sapoRes.json();
     let productContext = "";
 
     if (sapoData.products && sapoData.products.length > 0) {
-      productContext = "DỮ LIỆU KHO HÀNG THẬT TẠI RONA (DÙNG ĐỂ BÁO GIÁ):\\n" + sapoData.products.map(p => {
+      productContext = "DỮ LIỆU KHO RONA THẬT (DÙNG ĐỂ BÁO GIÁ):\\n" + sapoData.products.map(p => {
         const price = (p.variants && p.variants[0] && Number(p.variants[0].price) > 0) 
                       ? Number(p.variants[0].price).toLocaleString('vi-VN') + "đ" 
                       : "Liên hệ";
         return `- ${p.title}: ${price}. Link: https://lyuongruouvang.com/products/${p.handle}`;
       }).join("\\n");
     } else {
-      productContext = "Hiện tại không tìm thấy sản phẩm chính xác trong kho nhanh.";
+      productContext = "Hiện tại không tìm thấy sản phẩm này trong kho nhanh.";
     }
 
-    // 2. CÀI ĐẶT TÍNH CÁCH CHO HƯƠNG LAN
-    const finalSystemPrompt = `Bạn là Hương Lan - Chuyên gia Sommelier tư vấn pha lê cao cấp RONA.
+    // THIẾT LẬP LỜI THOẠI HƯƠNG LAN
+    const finalSystemPrompt = `Bạn là Hương Lan - Chuyên gia tư vấn pha lê RONA.
+    NHIỆM VỤ: Tư vấn đẳng cấp về ly pha lê Bohemia và Rona.
     
-    NGỮ CẢNH TRANG WEB KHÁCH ĐANG XEM:
-    ${context}
+    NGỮ CẢNH TRANG WEB KHÁCH ĐANG XEM: ${context}
+    DỮ LIỆU KHO HÀNG: ${productContext}
     
-    DỮ LIỆU TỪ KHO SAPO (ƯU TIÊN):
-    ${productContext}
-    
-    QUY TẮC BẮT BUỘC:
-    1. TUYỆT ĐỐI KHÔNG BỊA GIÁ. Nếu dữ liệu kho không có, hãy mời khách xem tại: https://lyuongruouvang.com/collections/all
-    2. Chỉ tư vấn các sản phẩm có thật dựa trên Link và Tên từ dữ liệu kho.
-    3. Trả lời bằng giọng điệu lịch sự, đẳng cấp của một chuyên gia về rượu vang.
-    4. Nếu khách hỏi giá, hãy trình bày rõ ràng Tên sản phẩm, Giá và Link mua hàng.`;
+    QUY TẮC:
+    1. TUYỆT ĐỐI KHÔNG BỊA GIÁ. Chỉ dùng giá và link từ dữ liệu kho ở trên.
+    2. Nếu không có hàng, mời khách xem tại: https://lyuongruouvang.com/collections/all
+    3. Trả lời lịch sự, am hiểu sâu về rượu vang.`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -71,9 +62,9 @@ app.post('/chat', async (req, res) => {
 
   } catch (error) { 
     console.error("Lỗi:", error);
-    res.status(500).json({ reply: "Duy chờ em xíu, Hương Lan đang kiểm tra lại kho hàng nhé!" }); 
+    res.status(500).json({ reply: "Hương Lan đang kiểm tra lại kho, Duy chờ em tí nhé!" }); 
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server RONA Live trên port ${PORT}`));
+app.listen(PORT, () => console.log(`Server RONA chạy tại port ${PORT}`));
