@@ -7,18 +7,21 @@ let cachedProducts = [];
 let lastFetch = 0;
 
 async function getProducts() {
+  // Cache 5 phút
   if (Date.now() - lastFetch < 5 * 60 * 1000 && cachedProducts.length > 0) {
     return cachedProducts;
   }
 
   try {
-    const auth = Buffer.from(`${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`).toString("base64");
+    const auth = Buffer.from(
+      `${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`
+    ).toString("base64");
 
     const res = await fetch(
       `https://${process.env.SAPO_STORE_ALIAS}.mysapo.net/admin/products.json?limit=250&fields=title,alias,variants,body_html`,
       {
         headers: {
-          "Authorization": `Basic ${auth}`,
+          Authorization: `Basic ${auth}`,
           "Content-Type": "application/json"
         }
       }
@@ -26,12 +29,15 @@ async function getProducts() {
 
     const data = await res.json();
 
-    cachedProducts = (data.products || []).map(p => ({
-      name: p.title,
-      price: p.variants?.[0]?.price || "Liên hệ",
-      description: (p.body_html || "").replace(/<[^>]+>/g, ""), // bỏ HTML
-      url: `https://lyuongruouvang.com/products/${p.alias}`
-    }));
+    // 🔥 LỌC DATA SẠCH (fix lỗi undefined)
+    cachedProducts = (data.products || [])
+      .filter(p => p && p.title && p.alias)
+      .map(p => ({
+        name: String(p.title),
+        price: p.variants?.[0]?.price || "Liên hệ",
+        description: (p.body_html || "").replace(/<[^>]+>/g, ""),
+        url: `https://lyuongruouvang.com/products/${p.alias}`
+      }));
 
     lastFetch = Date.now();
     return cachedProducts;
@@ -42,54 +48,88 @@ async function getProducts() {
   }
 }
 
-// 🔥 Tìm sản phẩm gần đúng
+// 🔥 MATCH SẢN PHẨM (đã fix crash + thông minh hơn)
 function findRelevantProducts(message, products) {
+  if (!message || typeof message !== "string") return [];
+
   const msg = message.toLowerCase();
 
   return products
-    .filter(p => msg.includes(p.name.toLowerCase().split(" ")[0]))
+    .filter(p => {
+      if (!p || !p.name) return false;
+
+      const name = p.name.toLowerCase();
+
+      return (
+        msg.includes(name) ||
+        name.includes(msg) ||
+        msg.split(" ").some(word => name.includes(word))
+      );
+    })
+    .sort((a, b) => b.name.length - a.name.length) // ưu tiên chính xác
     .slice(0, 3);
 }
 
 module.exports = async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, POST, GET');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "OPTIONS, POST");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method === "OPTIONS") return res.status(200).end();
 
   try {
     const { message, context } = req.body || {};
-    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || "Unknown";
 
-    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+    // 🔥 CHẶN MESSAGE RỖNG
+    if (!message || typeof message !== "string") {
+      return res.status(200).json({
+        reply: "Anh/chị nhập giúp em câu hỏi nhé 😊"
+      });
+    }
+
+    const ip =
+      req.headers["x-forwarded-for"] ||
+      req.socket?.remoteAddress ||
+      "Unknown";
+
+    const now = new Date(
+      new Date().toLocaleString("en-US", {
+        timeZone: "Asia/Ho_Chi_Minh"
+      })
+    );
 
     // 📊 thống kê
-    if (message && message !== "Duy_Check_68") {
+    if (message !== "Duy_Check_68") {
       stats.totalVisits++;
       if (ip !== "Unknown") stats.uniqueIPs.add(ip);
 
       stats.recentQuestions.push({
         q: message,
-        time: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+        time: now.toLocaleTimeString("vi-VN", {
+          hour: "2-digit",
+          minute: "2-digit"
+        })
       });
 
       if (stats.recentQuestions.length > 50) stats.recentQuestions.shift();
     }
 
+    // 🔐 ADMIN CHECK
     if (message === "Duy_Check_68") {
       return res.status(200).json({
         reply: `📊 ADMIN:\nKhách: ${stats.uniqueIPs.size}\nTương tác: ${stats.totalVisits}`
       });
     }
 
-    // 🔥 lấy sản phẩm
+    // 🔥 Lấy sản phẩm
     const products = await getProducts();
 
-    // 🔥 tìm sản phẩm liên quan
+    // 🔥 Tìm sản phẩm liên quan
     const relevant = findRelevantProducts(message, products);
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -105,24 +145,24 @@ MỤC TIÊU:
 - Dẫn dắt khách mua hàng
 
 PHONG CÁCH:
-- Tự nhiên như chat Zalo
+- Chat tự nhiên như Zalo
 - Ngắn gọn, dễ hiểu
-- Có cảm xúc nhẹ (🍷✨)
-- Không trả lời máy móc
+- Có cảm xúc nhẹ 🍷✨
+- Không máy móc
 
-CHIẾN LƯỢC:
-- Nếu khách hỏi giá → giải thích giá trị
-- Nếu phân vân → chọn 1 sản phẩm tốt nhất
-- Nếu chưa rõ → hỏi lại 1 câu
-- Nếu không có → gợi ý gần nhất
+CHIẾN LƯỢC BÁN:
+- Hỏi giá → giải thích giá trị
+- Phân vân → chọn 1 sản phẩm tốt nhất
+- Không có → gợi ý gần nhất
+- Chưa rõ → hỏi lại 1 câu
 
 NGỮ CẢNH:
-Khách đang ở: "${context || 'Trang chủ'}"
+Khách đang ở: "${context || "Trang chủ"}"
 
-SẢN PHẨM GỢI Ý:
+SẢN PHẨM LIÊN QUAN:
 ${JSON.stringify(relevant)}
 
-TOÀN BỘ SẢN PHẨM:
+MỘT SỐ SẢN PHẨM:
 ${JSON.stringify(products.slice(0, 50))}
 
 LUÔN KẾT THÚC:
@@ -141,9 +181,11 @@ LUÔN KẾT THÚC:
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("ERROR:", err);
+
     return res.status(200).json({
-      reply: "Dạ em đang bận chút xíu 😥 Anh/chị nhắn Zalo giúp em nhé 👉 https://zalo.me/0963111234"
+      reply:
+        "Dạ em đang bận chút xíu 😥 Anh/chị nhắn Zalo giúp em nhé 👉 https://zalo.me/0963111234"
     });
   }
 };
