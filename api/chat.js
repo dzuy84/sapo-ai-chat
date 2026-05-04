@@ -1,253 +1,87 @@
-{% assign info = settings.fot_info %}
-{% assign social = settings.fot_social %}
-{% assign c1_title = settings.fot_c1_title %}
-{% assign c1_menu = settings.fot_menu1 %}
-{% assign c2_title = settings.fot_c2_title %}
-{% assign c2_menu = settings.fot_menu2 %}
-{% assign c3_title = settings.fot_c3_title %}
-{% assign c3_menu = settings.fot_menu3 %}
-{% assign c4_title = settings.fot_c4_title %}
-{% assign c4_menu = settings.fot_menu4 %}
-{% assign coppyright = settings.coppyright %}
-{% assign btt = settings.backtotop_enable %}
+const { OpenAI } = require("openai");
 
-<footer class="footer-container">
-    <div class="footer-top">
-        <div class="container">
-            <div class="footer-static">
-                <div class="row">
-                    <div class="f-col f-col1 col-md-4 col-sm-12 col-xs-12">
-                        <div class="logo-footer">
-                            <a href="/">
-                                <img src="{{ 'logo.png' | asset_url }}" alt="{{ store.name }}" class="img-responsive" width="350" height="93" loading="eager" />
-                            </a>
-                        </div>
-                        <div class="footer-content">
-                            <ul class="info">
-                                {% if settings.store_edit %}
-                                <li><b>Địa chỉ</b>: {{ settings.store_address }}<a class="link-map" href="{{settings.store_address_map}}" target="_blank"> [Xem bản đồ]</a></li>
-                                {% if settings.store_address2 != null and settings.store_address2 != '' %}
-                                <li><b>Showroom</b>: {{ settings.store_address2 }}<a class="link-map" href="{{settings.store_address_map2}}" target="_blank"> [Xem bản đồ]</a></li>
-                                {% endif %}
-                                <li><b>Điện thoại</b>: <a href="tel:{{ settings.store_phone | remove: ' '}}">{{ settings.store_phone }}</a></li>
-                                <li><b>Website</b>: <a href="{{ settings.store_web }}">{{ settings.store_web }}</a></li>
-                                <li><b>Email</b>: <a href="mailto:{{ settings.store_email }}">{{ settings.store_email }}</a></li>
-                                {% else %}
-                                <li><b>Địa chỉ</b>: {{ store.address }}, {{ store.province }}</li>
-                                <li><b>Điện thoại</b>: <a href="tel:{{ store.phone_number | remove: ' '}}">{{ store.phone_number }}</a></li>
-                                <li><b>Website</b>: <a href="https:{{ store.url }}">https:{{ store.url }}</a></li>
-                                <li><b>Email</b>: <a href="mailto:{{ store.customer_email }}">{{ store.customer_email }}</a></li>
-                                {% endif %}
-                            </ul>
-                            <div class="social-icons">
-                                <ul>
-                                    {% if settings.social_twitter_enable %}<li class="twitter"><a title="twitter" href="{{ settings.social_twitter_link }}" target="_blank" rel="noopener noreferrer"><i class="fa-twitter fa"></i></a></li>{% endif %}
-                                    {% if settings.social_facebook_enable %}<li class="facebook"><a title="facebook" href="{{ settings.social_facebook_link }}" target="_blank" rel="noopener noreferrer"><i class="fa-facebook fa"></i></a></li>{% endif %}
-                                    {% if settings.social_youtube_enable %}<li class="googleplus"><a title="Youtube" href="{{ settings.social_youtube_link }}" target="_blank" rel="noopener noreferrer"><i class="fa-youtube fa"></i></a></li>{% endif %}
-                                    {% if settings.social_pinterest_enable %}<li class="youtube"><a title="Pinterest" href="{{ settings.social_pinterest_link }}" target="_blank" rel="noopener noreferrer"><i class="fa fa-pinterest-p"></i></a></li>{% endif %}
-                                    {% if settings.social_instagram_enable %}<li class="pinterest"><a title="pinterest" href="{{ settings.social_instagram_link }}" target="_blank" rel="noopener noreferrer"><i class="fa-instagram"></i></a></li>{% endif %}
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="f-col f-col2 col-md-2 col-sm-6 col-xs-6">
-                        <div class="footer-title"><h3>{{c2_title}}</h3></div>
-                        <div class="footer-content">
-                            <ul class="menu">
-                                {% for link in linklists[c2_menu].links %}<li><a href="{{ link.url }}">{{ link.title }}</a></li>{% endfor %}
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="f-col f-col3 col-md-2 col-sm-6 col-xs-6">
-                        <div class="footer-title"><h3>{{c3_title}}</h3></div>
-                        <div class="footer-content">
-                            <ul class="menu">
-                                {% for link in linklists[c3_menu].links %}<li><a href="{{ link.url }}">{{ link.title }}</a></li>{% endfor %}
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="f-col f-col4 col-md-4 col-sm-12 col-xs-12">
-                        <div class="footer-title"><h3>{{c4_title}}</h3></div>
-                        <div class="footer-content">
-                            <div class="content">
-                                <div class="footer-facebook-link">
-                                    <a href="https://www.facebook.com/lyuongruouvangvn/" target="_blank" rel="noopener noreferrer">
-                                        <img src="https://bizweb.dktcdn.net/thumb/grande/100/371/914/products/1000044447.jpg?v=1763951288950" alt="Fanpage Bohemia" class="img-responsive center-block" style="width: 100%; max-width: 350px;" loading="lazy" />
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div> 
+let stats = { totalVisits: 0, uniqueIPs: new Set(), recentQuestions: [] };
 
-    <div class="footer-bottom">
-        <div class="container">
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="footer-copyright">
-                        <small class="copyright">
-                            {% if coppyright != null %}<span>{{coppyright}} | Cung cấp bởi <a href="https://lyuongruouvang.com">lyuongruouvang</a></span>
-                            {% else %}<span>© Bản quyền thuộc về Bohemia & Rona</span>{% endif %}
-                        </small>
-                    </div>
-                </div>
-                <div class="col-md-6 text-right">
-                    <div class="payment"><img src="{{ 'payment.png' | asset_url }}" alt="Payment" loading="lazy"></div>
-                </div>
-            </div> 
-        </div> 
-        {% if btt %}<div class="back-to-top"><i class="fa fa-angle-double-up"></i></div>{% endif %}
-    </div>
-</footer>
+module.exports = async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, POST, GET');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
 
-<div id="rona-ai-container">
-    <div id="ai-btn-rona">🍷 Tư vấn AI</div>
-    <div id="ai-box-rona">
-        <div id="ai-header-rona">
-            <span>✨ RONA Expert</span>
-            <span id="ai-close-rona" style="cursor:pointer; font-size:22px;">×</span>
-        </div>
-        <div id="ai-msg-rona"></div>
-        <div id="ai-loading-rona" style="display:none; padding:10px; font-size:12px; color:#8b0000; background:transparent; border-top:1px solid rgba(255,255,255,0.3);">RONA đang xử lý...</div>
-        <div id="ai-input-rona">
-            <input id="ai-text-rona" type="text" placeholder="Hỏi Rona về ly, cốc pha lê..." autocomplete="off" />
-            <button id="ai-send-rona">Gửi</button>
-        </div>
-    </div>
-</div>
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
-<style>
-/* CSS NÂNG CẤP HIỆU ỨNG GLASS & THU NHỎ KÍCH THƯỚC */
-#ai-btn-rona { position: fixed !important; bottom: 85px !important; right: 20px !important; background: #8b0000 !important; color: #fff !important; padding: 12px 22px !important; border-radius: 30px !important; cursor: pointer !important; z-index: 2147483647 !important; font-weight: bold !important; box-shadow: 0 4px 15px rgba(0,0,0,0.3) !important; }
+  try {
+    // Đã thêm biến context để nhận diện trang web khách đang xem
+    const { message, context } = req.body || {};
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || "Unknown";
+    const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
 
-/* Thu nhỏ thành 300x420, Thêm Glassmorphism */
-#ai-box-rona { position: fixed !important; bottom: 150px !important; right: 20px !important; width: 300px !important; height: 420px !important; background: rgba(255, 255, 255, 0.65) !important; backdrop-filter: blur(15px) !important; -webkit-backdrop-filter: blur(15px) !important; border: 1px solid rgba(255, 255, 255, 0.6) !important; display: none; flex-direction: column !important; z-index: 2147483647 !important; border-radius: 15px !important; overflow: hidden !important; box-shadow: 0 10px 40px rgba(0,0,0,0.2) !important; font-family: Arial, sans-serif !important; }
-
-/* Header mờ ảo sang trọng */
-#ai-header-rona { background: rgba(139, 0, 0, 0.85) !important; color: #fff !important; padding: 12px 15px !important; display: flex; justify-content: space-between; align-items: center; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.2); }
-
-/* Nền trong suốt để lộ lớp kính */
-#ai-msg-rona { flex: 1 !important; padding: 15px !important; overflow-y: auto !important; font-size: 14px !important; background: transparent !important; }
-
-/* Vùng nhập liệu */
-#ai-input-rona { display: flex !important; padding: 10px !important; border-top: 1px solid rgba(255, 255, 255, 0.5) !important; background: rgba(255, 255, 255, 0.3) !important; }
-#ai-text-rona { flex: 1 !important; border: 1px solid rgba(255, 255, 255, 0.8) !important; background: rgba(255, 255, 255, 0.7) !important; padding: 8px 12px !important; border-radius: 20px !important; outline: none !important; font-size: 13px !important; color: #333 !important; }
-#ai-text-rona::placeholder { color: #777 !important; }
-#ai-send-rona { background: #8b0000 !important; color: #fff !important; border: none !important; margin-left: 8px !important; padding: 0 15px !important; border-radius: 20px !important; cursor: pointer !important; font-weight: bold; box-shadow: 0 2px 8px rgba(139,0,0,0.3) !important;}
-
-/* Tin nhắn của khách */
-.msg-u { text-align: right; margin-bottom: 15px; }
-.msg-u span { background: rgba(139, 0, 0, 0.9) !important; color: #fff !important; padding: 8px 14px !important; border-radius: 15px 15px 0 15px !important; display: inline-block; max-width: 85%; box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;}
-
-/* Bong bóng AI dạng Glass sáng */
-.msg-a { background: rgba(255, 255, 255, 0.85) !important; backdrop-filter: blur(5px) !important; border: 1px solid rgba(255, 255, 255, 0.8) !important; color: #333 !important; padding: 12px 14px !important; border-radius: 15px 15px 15px 0 !important; margin-bottom: 15px; line-height: 1.6 !important; max-width: 92%; font-size: 13px; position: relative; box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important; }
-.msg-a a { display: block !important; margin-top: 10px !important; padding: 10px !important; background: rgba(255, 255, 255, 0.9) !important; color: #8b0000 !important; border: 1px solid rgba(139, 0, 0, 0.2) !important; border-radius: 8px !important; text-decoration: none !important; font-weight: bold !important; text-align: center; }
-.voice-btn { display: inline-block; font-size: 11px; color: #8b0000; margin-top: 8px; cursor: pointer; font-weight: bold; border: 1px dashed rgba(139, 0, 0, 0.5); padding: 3px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.6) !important; }
-</style>
-
-<script>
-let chatHistory = []; 
-
-document.addEventListener("DOMContentLoaded", function() {
-    const box = document.getElementById("ai-box-rona");
-    const msgBox = document.getElementById("ai-msg-rona");
-    const input = document.getElementById("ai-text-rona");
-    const loading = document.getElementById("ai-loading-rona");
-
-    // Khôi phục lịch sử chat cũ nếu có
-    const savedChat = localStorage.getItem("rona_chat_history_vfinal");
-    if (savedChat) {
-        msgBox.innerHTML = savedChat;
-        setTimeout(() => { msgBox.scrollTop = msgBox.scrollHeight; }, 300);
+    if (message && message !== "Duy_Check_68") {
+      stats.totalVisits++;
+      if (ip !== "Unknown") stats.uniqueIPs.add(ip);
+      stats.recentQuestions.push({ q: message, time: now.toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) });
+      if (stats.recentQuestions.length > 50) stats.recentQuestions.shift();
     }
 
-    document.getElementById("ai-btn-rona").onclick = () => {
-        box.style.display = (box.style.display === 'flex') ? 'none' : 'flex';
-        msgBox.scrollTop = msgBox.scrollHeight;
-    };
-    document.getElementById("ai-close-rona").onclick = () => { box.style.display = 'none'; };
-
-    function formatAIResponse(text) {
-        if (!text) return "";
-        return text
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\n/g, "<br>")
-            .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_self">🛍️ Xem ngay: $1</a>');
+    if (message === "Duy_Check_68") {
+      return res.status(200).json({ reply: `📊 **ADMIN RONA BÁO CÁO**:\nKhách hôm nay: **${stats.uniqueIPs.size}**.\nTổng tương tác: ${stats.totalVisits}.` });
     }
 
-    window.speakRona = function(el, text) {
-        if (window.speechSynthesis.speaking) {
-            window.speechSynthesis.cancel();
-            el.innerText = "🔊 Nghe lại";
-            return;
-        }
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = "vi-VN";
-        u.onstart = () => el.innerText = "🛑 Dừng đọc";
-        u.onend = () => el.innerText = "🔊 Nghe lại";
-        window.speechSynthesis.speak(u);
-    };
+    let products = [];
+    try {
+      const auth = Buffer.from(`${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`).toString("base64");
+      const sapoRes = await fetch(`https://${process.env.SAPO_STORE_ALIAS}.mysapo.net/admin/products.json?limit=250&fields=title,alias`, { 
+        headers: { "Authorization": `Basic ${auth}`, "Content-Type": "application/json" } 
+      });
+      const data = await sapoRes.json();
+      products = (data.products || []).map(p => ({ name: p.title, url: `https://lyuongruouvang.com/products/${p.alias}` }));
+    } catch (e) { console.error("Sapo Error"); }
 
-    async function handleSend() {
-        const text = input.value.trim();
-        if (!text) return;
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.5, 
+      messages: [
+        {
+          role: "system",
+          content: `Bạn là Le Dzuy - Sommelier cao cấp tại RONA. 
+          
+          THÔNG TIN QUAN TRỌNG VỀ KHÁCH HÀNG:
+          Khách hàng đang đứng tại trang web có tiêu đề/đường link là: "${context || 'Trang chủ hoặc không rõ'}"
+          👉 Nếu khách hỏi "sản phẩm này", "ly này", "cái này" bao nhiêu ml, giá bao nhiêu... Bạn PHẢI tự động hiểu họ đang hỏi về sản phẩm nằm trong đường link/tiêu đề trang web đó để trả lời cho chính xác.
 
-        // Lấy ngữ cảnh sản phẩm từ trang web
-        const productName = document.querySelector('h1')?.innerText || document.title;
-        const productPrice = document.querySelector('.product-price')?.innerText || "";
-        const productDesc = document.querySelector('.product-description')?.innerText || "";
-        const fullContext = `Sản phẩm đang xem: ${productName}. Giá: ${productPrice}. Mô tả sơ lược: ${productDesc.substring(0, 500)}`;
+          PHONG CÁCH TƯ VẤN: Lịch sự, tự nhiên, sang trọng và có tâm (Dùng "Duy", "anh/chị"). 
+          - NẾU KHÁCH HỎI KIẾN THỨC BẤT KỲ (dung tích, kích thước, xuất xứ...): BẮT BUỘC giải đáp ngắn gọn 1-2 câu đúng chuyên môn trước.
+          
+          SAU ĐÓ, BẮT BUỘC TRẢ LỜI THEO CẤU TRÚC 3 PHẦN:
+          1. Link Sản phẩm/Tìm kiếm: 
+             - Nếu khách hỏi sản phẩm cụ thể và có trong danh sách: <a href="URL" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Tên Sản Phẩm</a>.
+             - Nếu không có: <a href="https://lyuongruouvang.com/search?query=${encodeURIComponent(message)}" style="color:#8b0000; font-weight:bold; text-decoration:underline;">Duy mời anh/chị xem thêm các mẫu "${message}" tại đây nhé</a>.
+          
+          2. Link Danh mục tương ứng (Dựa vào ý khách hỏi, CHỌN 1 LINK ĐÚNG NHẤT):
+             - Ly vang đỏ: <br>🍷 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-uong-vang-do" style="color:#8b0000; font-weight:bold;">Danh mục Ly Vang Đỏ</a>
+             - Ly vang trắng: <br>🍷 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-vang-trang" style="color:#8b0000; font-weight:bold;">Danh mục Ly Vang Trắng</a>
+             - Ly vang ngọt: <br>🍷 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-uong-vang-ngot" style="color:#8b0000; font-weight:bold;">Danh mục Ly Vang Ngọt</a>
+             - Ly Champagne/Vang nổ: <br>🥂 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-champagne" style="color:#8b0000; font-weight:bold;">Danh mục Ly Champagne</a>
+             - Bình thở/Decanter/Chắt rượu: <br>🏺 Khám phá thêm: <a href="https://lyuongruouvang.com/binh-chiet-ruou" style="color:#8b0000; font-weight:bold;">Danh mục Bình Chiết Rượu</a>
+             - Ly Brandy/Cognac: <br>🥃 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-brandy-cognac" style="color:#8b0000; font-weight:bold;">Danh mục Ly Brandy - Cognac</a>
+             - Ly Whisky/Rượu mạnh: <br>🥃 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-whiskey" style="color:#8b0000; font-weight:bold;">Danh mục Ly Whiskey</a>
+             - Ly Bia: <br>🍺 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-bia" style="color:#8b0000; font-weight:bold;">Danh mục Ly Bia Pha Lê</a>
+             - Bình hoa/Bình bông: <br>💐 Khám phá thêm: <a href="https://lyuongruouvang.com/binh-bong" style="color:#8b0000; font-weight:bold;">Bộ sưu tập Bình Hoa Pha Lê</a>
+             - Bộ bình ly uống nước/trà: <br>🫖 Khám phá thêm: <a href="https://lyuongruouvang.com/bo-binh-tra-nuoc" style="color:#8b0000; font-weight:bold;">Bộ Bình Ly Uống Nước</a>
+             - Pha lê mạ vàng: <br>✨ Khám phá thêm: <a href="https://lyuongruouvang.com/ma-vang-dap-noi" style="color:#8b0000; font-weight:bold;">Pha Lê Mạ Vàng Đắp Nổi</a>
+             - Quà tặng: <br>🎁 Khám phá thêm: <a href="https://lyuongruouvang.com/bo-qua-tang" style="color:#8b0000; font-weight:bold;">Gợi ý Bộ Quà Tặng Pha Lê</a>
+             - Mặc định nếu hỏi chung chung: <br>💎 Khám phá thêm: <a href="https://lyuongruouvang.com/pha-le-chau-au-cao-cap" style="color:#8b0000; font-weight:bold;">Pha Lê Châu Âu Cao Cấp</a>
 
-        msgBox.innerHTML += `<div class="msg-u"><span>${text}</span></div>`;
-        input.value = "";
-        loading.style.display = "block";
-        msgBox.scrollTop = msgBox.scrollHeight;
+          3. Câu chốt Zalo: <br><a href="https://zalo.me/0963111234" style="color:#0068ff; font-weight:bold;">👉 Cần tư vấn kỹ hơn, anh/chị nhắn Zalo cho Duy nhé!</a>
 
-        try {
-            // ĐÃ ĐỔI SANG LINK VERCEL CHUẨN CỦA SẾP
-            const res = await fetch("https://sapo-ai-chat-vdwf.vercel.app/api/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
-                    message: text,
-                    history: chatHistory,
-                    context: fullContext 
-                })
-            });
-            
-            if (!res.ok) throw new Error("Server Error");
+          DATA: ${JSON.stringify(products)}`
+        },
+        { role: "user", content: message }
+      ]
+    });
 
-            const data = await res.json();
-            loading.style.display = "none";
-            
-            chatHistory.push({ role: "user", content: text });
-            chatHistory.push({ role: "assistant", content: data.reply });
-            if (chatHistory.length > 6) chatHistory.splice(0, 2);
-
-            let htmlReply = formatAIResponse(data.reply);
-            let speechText = data.reply.replace(/\[.*?\]\(.*?\)/g, '').replace(/<[^>]*>?/gm, '');
-
-            msgBox.innerHTML += `
-                <div class="msg-a">
-                    ${htmlReply}
-                    <div style="text-align:right">
-                        <span class="voice-btn" onclick="speakRona(this, \`${speechText.replace(/`/g, "'").replace(/"/g, '')}\`)">🔊 Nghe tư vấn</span>
-                    </div>
-                </div>`;
-            
-            localStorage.setItem("rona_chat_history_vfinal", msgBox.innerHTML);
-            setTimeout(() => { msgBox.scrollTop = msgBox.scrollHeight; }, 100);
-        } catch (err) {
-            loading.style.display = "none";
-            msgBox.innerHTML += `<div class="msg-a">Hương Lan đang bận một chút, Duy nhắn lại sau 1 phút nhé!</div>`;
-            msgBox.scrollTop = msgBox.scrollHeight;
-        }
-    }
-
-    document.getElementById("ai-send-rona").onclick = handleSend;
-    input.onkeypress = (e) => { if(e.key === 'Enter') handleSend(); };
-});
-</script>
+    return res.status(200).json({ reply: completion.choices[0].message.content });
+  } catch (err) {
+    return res.status(200).json({ reply: "Dạ Duy đang bận chút xíu, anh/chị nhắn Zalo Duy tư vấn ngay nhé! <br><a href='https://zalo.me/0963111234' style='color:#0068ff; font-weight:bold;'>👉 Chat Zalo Duy</a>" });
+  }
+};
