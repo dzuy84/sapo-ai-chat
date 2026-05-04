@@ -100,4 +100,4 @@ module.exports = async (req, res) => {
   } catch (err) {
     return res.status(200).json({ reply: "Dạ em đang bận chút xíu, anh/chị nhắn Zalo Em tư vấn ngay nhé! <br><a href='https://zalo.me/0963111234' style='color:#0068ff; font-weight:bold;'>👉 Chat Zalo Em</a>" });
   }
-}; 
+};
