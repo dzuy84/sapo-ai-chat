@@ -1,53 +1,46 @@
 const { OpenAI } = require("openai");
 
-// ===== OPENAI SINGLETON =====
+// ===== 1. OPENAI SINGLETON & CACHE =====
 let openai;
 function getOpenAI() {
-  if (!openai) {
-    openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-  }
+  if (!openai) openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   return openai;
 }
 
-// ===== CACHE =====
 let cachedProducts = [];
 let lastFetch = 0;
 
 async function fetchProducts() {
   try {
-    if (!process.env.SAPO_STORE_ALIAS) throw new Error("Thiếu SAPO_STORE_ALIAS trong env");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
 
-    const auth = Buffer.from(
-      `${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`
-    ).toString("base64");
+    const auth = Buffer.from(`${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`).toString("base64");
 
-    const res = await fetch(
+    const sapoRes = await fetch(
       `https://${process.env.SAPO_STORE_ALIAS}.mysapo.net/admin/products.json?limit=250&fields=title,alias`,
       {
-        headers: {
-          Authorization: `Basic ${auth}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+        signal: controller.signal,
       }
     );
 
-    if (!res.ok) throw new Error(`Sapo ${res.status}`);
-    const data = await res.json();
+    clearTimeout(timeout);
+    if (!sapoRes.ok) throw new Error(`Sapo HTTP ${sapoRes.status}`);
+    const data = await sapoRes.json();
 
     return (data.products || []).map((p) => ({
       name: p.title,
       url: `https://lyuongruouvang.com/products/${p.alias}`,
     }));
   } catch (e) {
-    console.error("Sapo error:", e.message);
+    console.error("Sapo fetch error:", e.message);
     return [];
   }
 }
 
 async function getProductsCached() {
-  if (Date.now() - lastFetch < 5 * 60 * 1000 && cachedProducts.length) {
+  if (Date.now() - lastFetch < 5 * 60 * 1000 && cachedProducts.length > 0) {
     return cachedProducts;
   }
   cachedProducts = await fetchProducts();
@@ -55,163 +48,96 @@ async function getProductsCached() {
   return cachedProducts;
 }
 
-// ===== INTENT =====
-function detectIntent(message) {
-  const m = message.toLowerCase();
-
-  return {
-    buying: /mua|giá|bao nhiêu|ship|còn hàng|order/i.test(m),
-    gift: /tặng|biếu|quà/i.test(m),
-    decor: /trang trí|bình hoa|đèn/i.test(m),
-    drink: /vang|rượu|whiskey|champagne/i.test(m),
-  };
-}
-
-// ===== PRODUCT MATCH (STOPWORDS + SYNONYMS + SCORING) =====
+// ===== 2. LỌC SẢN PHẨM TRÁNH TỐN TOKEN =====
 function findRelevantProducts(message, products) {
-  const stopwords = new Set([
-    "mua", "giá", "bao", "nhiêu", "cho", "tôi", "em", "anh", "chị",
-    "cần", "muốn", "hỏi", "ơi", "nhé", "nha", "được", "không", "có", "xem"
-  ]);
-
-  const synonymMap = {
-    whiskey: "whisky",
-    "vang đỏ": "vang",
-    "vang trắng": "vang",
-    bình: "bình",
-    hoa: "hoa",
-    đèn: "đèn",
-  };
-
-  const tokens = message
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((t) => t.length > 1 && !stopwords.has(t))
-    .map((t) => synonymMap[t] || t);
-
+  const stopwords = new Set(["mua", "giá", "bao", "nhiêu", "cho", "xem", "cái", "này"]);
+  const tokens = message.toLowerCase().split(/\s+/).filter(t => t.length > 1 && !stopwords.has(t));
+  
   if (tokens.length === 0) return [];
 
   const scored = products.map((p) => {
-    const name = p.name.toLowerCase();
     let score = 0;
-
-    tokens.forEach((t) => {
-      if (name.includes(t)) score++;
-    });
-
+    const name = p.name.toLowerCase();
+    tokens.forEach((t) => { if (name.includes(t)) score++; });
     return { ...p, score };
   });
 
-  return scored
-    .filter((p) => p.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 4);
+  return scored.filter(p => p.score > 0).sort((a, b) => b.score - a.score).slice(0, 5);
 }
 
-// ===== SANITIZE CONTEXT =====
-function sanitizeContext(context) {
-  if (!Array.isArray(context)) return [];
-
-  return context.slice(-6).map((m) => ({
-    role: m.role === "assistant" ? "assistant" : "user",
-    content: String(m.content).slice(0, 300),
-  }));
-}
-
-// ===== MAIN =====
+// ===== 3. MAIN HANDLER =====
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ reply: "Method not allowed" });
-  }
+  res.setHeader("Access-Control-Allow-Methods", "OPTIONS, POST");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ reply: "Method not allowed" });
 
   try {
-    let { message, context } = req.body || {};
-
-    if (typeof message !== "string") message = "";
-    message = message.trim();
-
-    if (!message) {
+    const { message, context } = req.body || {};
+    if (!message || typeof message !== "string" || message.trim() === "") {
       return res.status(400).json({ reply: "Tin nhắn không hợp lệ." });
     }
 
-    const products = await getProductsCached();
-    const relevantProducts = findRelevantProducts(message, products);
-    const intent = detectIntent(message);
-    const safeContext = sanitizeContext(context);
+    const ip = req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "Unknown";
+    console.log(`[CHAT] IP: ${ip} | Trang: ${context || "Trang chủ"} | Hỏi: ${message.slice(0, 100)}`);
 
-    // ===== MODE =====
-    let mode = "normal";
-    if (intent.gift) mode = "gift";
-    else if (intent.decor) mode = "decor";
-    else if (intent.drink) mode = "drink";
+    // Lấy data đã cache và lọc sản phẩm
+    const allProducts = await getProductsCached();
+    const relevantProducts = findRelevantProducts(message, allProducts);
+    const aiClient = getOpenAI();
 
-    const systemPrompt = `
-Bạn là nhân viên tư vấn pha lê cao cấp của THIÊN ÂN (ly, bình, quà tặng, trang trí).
-
-MỤC TIÊU:
-- Hiểu đúng nhu cầu khách
-- Tư vấn đúng sản phẩm
-- Dẫn khách đến mua hàng hoặc Zalo
-
-PHONG CÁCH:
-- Tự nhiên, lịch sự
-- Ngắn gọn, thuyết phục
-- Không lan man
-
-MODE: ${mode}
-
-LUẬT:
-- gift → gợi ý bộ quà tặng cao cấp
-- decor → bình hoa, đèn
-- drink → ly, decanter
-- buying → trả lời rõ + gợi ý sản phẩm
-
-SẢN PHẨM:
-${JSON.stringify(relevantProducts)}
-
-NẾU KHÔNG CÓ SẢN PHẨM:
-→ gợi ý link danh mục phù hợp
-
-LINK DANH MỤC:
-- Trang chủ: https://lyuongruouvang.com/
-- Quà tặng: https://lyuongruouvang.com/bo-qua-tang
-- Bình hoa: https://lyuongruouvang.com/binh-bong
-- Ly vang đỏ: https://lyuongruouvang.com/ly-uong-vang-do
-
-QUY TẮC LINK:
-- Dùng thẻ HTML <a href="LINK">Tên sản phẩm</a>
-- Tối đa 3 link trong một câu trả lời
-
-KẾT:
-👉 Cần hỗ trợ nhanh, anh/chị nhắn Zalo em nhé: https://zalo.me/0963111234
-`;
-
-    const openai = getOpenAI();
-
-    const completion = await openai.chat.completions.create({
+    const completion = await aiClient.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: intent.buying ? 0.7 : 0.5,
-      max_tokens: 700,
+      temperature: 0.5,
+      max_tokens: 600,
       messages: [
-        { role: "system", content: systemPrompt },
-        ...safeContext,
-        { role: "user", content: message },
+        {
+          role: "system",
+          content: `
+# VAI TRÒ
+Bạn là chuyên gia tư vấn pha lê cao cấp của THIÊN ÂN, chuyên các dòng RONA và Bohemia. Phong cách chuyên nghiệp, tinh tế, chốt đơn.
+
+# NGÔN NGỮ
+- Tự nhận diện và trả lời bằng ngôn ngữ khách dùng.
+- Tiếng Việt: xưng "Em", gọi "anh/chị". Tiếng Anh: xưng "I", gọi "you".
+
+# BỐI CẢNH
+Khách đang xem trang: "${context || "Trang chủ"}". Dùng thông tin này nếu khách hỏi "cái này", "ly này".
+
+# LOGIC XỬ LÝ
+## 1. Hỏi SẢN PHẨM CỤ THỂ
+- Cung cấp link sản phẩm trực tiếp (ưu tiên từ DỮ LIỆU SẢN PHẨM). 
+- Form link: <a href="URL" style="color:#8b0000;font-weight:bold;text-decoration:underline;">Tên sản phẩm</a>
+- Nếu không có: Tạo link search: <a href="https://lyuongruouvang.com/search?query=KEYWORD" style="color:#8b0000;font-weight:bold;text-decoration:underline;">Xem kết quả cho "KEYWORD" tại đây</a>
+- Kèm thêm 1 link danh mục bên dưới.
+
+## 2. Hỏi CHUNG
+- Trả lời tự nhiên, thêm 1 link danh mục phù hợp nhất.
+
+# DANH MỤC (CHỈ CHỌN MỘT)
+- Ly vang đỏ: <br>🍷 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-uong-vang-do" style="color:#8b0000;font-weight:bold;">Danh mục Ly Vang Đỏ</a>
+- Bộ quà tặng: <br>🎁 Khám phá thêm: <a href="https://lyuongruouvang.com/bo-qua-tang" style="color:#8b0000;font-weight:bold;">Gợi ý Bộ Quà Tặng</a>
+- Bình hoa: <br>💐 Khám phá thêm: <a href="https://lyuongruouvang.com/binh-bong" style="color:#8b0000;font-weight:bold;">Bình Hoa Pha Lê</a>
+- Decanter: <br>🏺 Khám phá thêm: <a href="https://lyuongruouvang.com/binh-chiet-ruou" style="color:#8b0000;font-weight:bold;">Bình Chiết Rượu Decanter</a>
+- Mặc định: <br>🍷 Khám phá thêm: <a href="https://lyuongruouvang.com/" style="color:#8b0000;font-weight:bold;">Sản Phẩm Pha Lê Cao Cấp</a>
+
+# CÂU KẾT BẮT BUỘC
+- Tiếng Việt: <br><a href="https://zalo.me/0963111234" style="color:#0068ff;font-weight:bold;">👉 Cần tư vấn kỹ hơn, anh/chị nhắn Zalo cho Em nhé!</a>
+- Tiếng Anh: <br><a href="https://zalo.me/0963111234" style="color:#0068ff;font-weight:bold;">👉 Need more help? Chat with us on Zalo!</a>
+
+# DỮ LIỆU SẢN PHẨM PHÙ HỢP
+${JSON.stringify(relevantProducts)}`,
+        },
+        { role: "user", content: message.trim() },
       ],
     });
 
-    console.log("TOKENS:", completion.usage);
-
-    return res.status(200).json({
-      reply: completion.choices[0].message.content,
-    });
+    return res.status(200).json({ reply: completion.choices[0].message.content });
   } catch (err) {
-    console.error("ERROR:", err.message);
-
+    console.error("Handler error:", err.message);
     return res.status(200).json({
-      reply:
-        "Em đang bận chút, anh/chị nhắn Zalo em tư vấn nhanh nhé 👉 https://zalo.me/0963111234",
+      reply: "Dạ em đang bận chút xíu, anh/chị nhắn Zalo Em tư vấn ngay nhé! <br><a href='https://zalo.me/0963111234' style='color:#0068ff;font-weight:bold;'>👉 Chat Zalo Em</a>",
     });
   }
 };
