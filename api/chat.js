@@ -15,12 +15,17 @@ async function fetchProducts() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3000);
 
-    const auth = Buffer.from(`${process.env.SAPO_API_KEY || ""}:${process.env.SAPO_API_SECRET || ""}`).toString("base64");
+    const auth = Buffer.from(
+      `${process.env.SAPO_API_KEY || ""}:${process.env.SAPO_API_SECRET || ""}`
+    ).toString("base64");
 
     const sapoRes = await fetch(
       `https://${process.env.SAPO_STORE_ALIAS}.mysapo.net/admin/products.json?limit=250&fields=title,alias`,
       {
-        headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/json",
+        },
         signal: controller.signal,
       }
     );
@@ -30,8 +35,7 @@ async function fetchProducts() {
     const data = await sapoRes.json();
 
     return (data.products || []).map((p) => ({
-      // VÁ LỖI 1: Bọc an toàn, nếu title bị undefined thì trả về chuỗi rỗng
-      name: p?.title || "", 
+      name: p?.title || "",
       url: `https://lyuongruouvang.com/products/${p?.alias || ""}`,
     }));
   } catch (e) {
@@ -52,37 +56,38 @@ async function getProductsCached() {
 // ===== 2. LỌC SẢN PHẨM TRÁNH TỐN TOKEN =====
 function findRelevantProducts(message, products) {
   if (!Array.isArray(products)) return [];
-  
-  const stopwords = new Set(["mua", "giá", "bao", "nhiêu", "cho", "xem", "cái", "này", "em", "anh", "chị", "ơi", "nhé"]);
-  
+
+  const stopwords = new Set([
+    "mua", "giá", "bao", "nhiêu", "cho", "xem", "cái", "này",
+    "em", "anh", "chị", "ơi", "nhé",
+  ]);
+
   const synonymMap = {
-    "whiskey": "whisky",
-    "bình": "bình",
-    "hoa": "hoa",
-    "đèn": "đèn",
+    whiskey: "whisky",
+    bình: "bình",
+    hoa: "hoa",
+    đèn: "đèn",
   };
 
-  // VÁ LỖI 2: Đảm bảo message luôn là string trước khi toLowerCase
-  const safeMessage = String(message || "");
-  
-  const tokens = safeMessage
+  const tokens = String(message || "")
     .toLowerCase()
     .split(/\s+/)
-    .filter(t => t.length > 1 && !stopwords.has(t))
-    .map(t => synonymMap[t] || t);
-  
+    .filter((t) => t.length > 1 && !stopwords.has(t))
+    .map((t) => synonymMap[t] || t);
+
   if (tokens.length === 0) return [];
 
   const scored = products.map((p) => {
     let score = 0;
-    // VÁ LỖI 3 CỐT LÕI: Đảm bảo không bao giờ gọi toLowerCase trên undefined
     const name = String(p?.name || "").toLowerCase();
-    
     tokens.forEach((t) => { if (name.includes(t)) score++; });
     return { ...p, score };
   });
 
-  return scored.filter(p => p.score > 0).sort((a, b) => b.score - a.score).slice(0, 5);
+  return scored
+    .filter((p) => p.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
 }
 
 // ===== 3. MAIN HANDLER =====
@@ -95,13 +100,16 @@ module.exports = async (req, res) => {
 
   try {
     let { message, context } = req.body || {};
-    
+
     if (!message || typeof message !== "string" || message.trim() === "") {
       return res.status(400).json({ reply: "Tin nhắn không hợp lệ." });
     }
 
-    message = message.trim();
-    if (message.length > 500) message = message.slice(0, 500);
+    // Trim + giới hạn độ dài — dùng biến này xuyên suốt
+    message = message.trim().slice(0, 500);
+
+    const ip = req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "Unknown";
+    console.log(`[CHAT] IP: ${ip} | Trang: ${context || "Trang chủ"} | Hỏi: ${message.slice(0, 100)}`);
 
     const allProducts = await getProductsCached();
     const relevantProducts = findRelevantProducts(message, allProducts);
@@ -119,7 +127,7 @@ module.exports = async (req, res) => {
 Bạn là chuyên gia tư vấn pha lê cao cấp của THIÊN ÂN, chuyên các dòng RONA và Bohemia. Phong cách chuyên nghiệp, tinh tế, tập trung chốt đơn hàng.
 
 # BỐI CẢNH
-Khách đang xem trang: "${typeof context === 'string' ? context : "Trang chủ"}".
+Khách đang xem trang: "${typeof context === "string" ? context : "Trang chủ"}".
 
 # LOGIC XỬ LÝ
 ## 1. Khách hỏi SẢN PHẨM CỤ THỂ
@@ -148,15 +156,18 @@ Khách đang xem trang: "${typeof context === 'string' ? context : "Trang chủ"
 # DỮ LIỆU SẢN PHẨM PHÙ HỢP
 ${JSON.stringify(relevantProducts)}`,
         },
-        { role: "user", content: safeMessage },
+        // Dùng message (đã trim + slice) — nhất quán, không cần safeMessage riêng
+        { role: "user", content: message },
       ],
     });
 
     return res.status(200).json({ reply: completion.choices[0].message.content });
   } catch (err) {
-    console.error("Handler error:", err.message);
+    // Log đầy đủ server-side để debug, KHÔNG expose ra client
+    console.error("Handler error:", err);
+
     return res.status(200).json({
-      reply: `Dạ em đang bận chút xíu. <i>(Lỗi hệ thống báo về: <b>${err.message}</b>)</i> <br><a href='https://zalo.me/0963111234' style='color:#0068ff;font-weight:bold;'>👉 Chat Zalo Em</a>`,
+      reply: "Dạ em đang bận chút xíu, anh/chị nhắn Zalo Em tư vấn ngay nhé! <br><a href='https://zalo.me/0963111234' style='color:#0068ff;font-weight:bold;'>👉 Chat Zalo Em</a>",
     });
   }
 };
