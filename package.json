@@ -1,13 +1,12 @@
 {
   "name": "sapo-ai-chat-vercel",
-  "version": "2.0.0",
-  "description": "AI Chatbot tư vấn pha lê Rona có tính năng Báo cáo",
+  "version": "2.1.0",
+  "description": "AI Chatbot tư vấn pha lê Rona",
   "main": "api/chat.js",
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
-    "openai": "^4.24.1",
-    "nodemailer": "^6.9.13"
+    "openai": "^4.24.1"
   },
   "engines": {
     "node": ">=18.0.0"
