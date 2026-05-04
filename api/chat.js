@@ -76,6 +76,7 @@ module.exports = async (req, res) => {
           - Ly Shot/Mạnh: <br>🥃 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-shot-ruou-manh" style="color:#8b0000; font-weight:bold;">Ly Shot Rượu Mạnh</a>
           - Ly Martini: <br>🍸 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-martini" style="color:#8b0000; font-weight:bold;">Ly Martini Pha Lê</a>
           - Ly Bia: <br>🍺 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-bia" style="color:#8b0000; font-weight:bold;">Danh mục Ly Bia</a>
+          - Ly Nước: <br>🍺 Khám phá thêm: <a href="https://lyuongruouvang.com/search?query=ly+u%E1%BB%91ng+n%C6%B0%E1%BB%9Bc" style="color:#8b0000; font-weight:bold;">Danh mục Ly Bia</a>
           - Ly Vang Ngọt: <br>🍷 Khám phá thêm: <a href="https://lyuongruouvang.com/ly-uong-vang-ngot" style="color:#8b0000; font-weight:bold;">Ly Vang Ngọt</a>
           - Bình hoa/Bình bông: <br>💐 Khám phá thêm: <a href="https://lyuongruouvang.com/binh-bong" style="color:#8b0000; font-weight:bold;">Bình Hoa Pha Lê</a>
           - Bình bông pha lê màu: <br>🌈 Khám phá thêm: <a href="https://lyuongruouvang.com/binh-bong-pha-le-mau" style="color:#8b0000; font-weight:bold;">Bình Hoa Pha Lê Màu</a>
