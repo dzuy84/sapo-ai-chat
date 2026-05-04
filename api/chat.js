@@ -1,6 +1,6 @@
 const { OpenAI } = require("openai");
 
-// Biến lưu trữ thống kê tạm thời trên Vercel (Vẫn giữ để sếp check bằng lệnh Duy_Check_68)
+// Biến lưu trữ thống kê tạm thời trên Vercel
 let stats = { totalVisits: 0, uniqueIPs: new Set(), recentQuestions: [] };
 
 module.exports = async (req, res) => {
@@ -9,6 +9,7 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, POST, GET');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
 
+  // Xử lý bước kiểm tra an ninh (Preflight) của trình duyệt
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -37,15 +38,19 @@ module.exports = async (req, res) => {
       return res.status(200).json({ reply: `📊 **ADMIN RONA BÁO CÁO**:\nHôm nay đã tiếp **${stats.uniqueIPs.size}** khách qua IP duy nhất.\nTổng số tương tác: ${stats.totalVisits}.` });
     }
 
-    // Lấy dữ liệu kho từ Sapo
+    // Lấy dữ liệu kho từ Sapo (Đã dùng đủ combo API KEY + SECRET)
     let products = [];
     try {
       const sapoAlias = process.env.SAPO_STORE_ALIAS; 
-      const sapoToken = process.env.SAPO_API_SECRET; 
+      const sapoKey = process.env.SAPO_API_KEY;
+      const sapoSecret = process.env.SAPO_API_SECRET; 
+      
+      // Mã hóa API Key và Secret thành chuỗi Base64 chuẩn của Sapo
+      const auth = Buffer.from(`${sapoKey}:${sapoSecret}`).toString("base64");
       
       const sapoRes = await fetch(`https://${sapoAlias}.mysapo.net/admin/products.json?limit=150&fields=title,variants,alias`, { 
         headers: { 
-          "X-Sapo-Access-Token": sapoToken,
+          "Authorization": `Basic ${auth}`,
           "Content-Type": "application/json"
         } 
       });
