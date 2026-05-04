@@ -94,10 +94,8 @@ If they mention "this glass" or "this one", use this context to provide advice.
 - Bộ quà tặng: <br>🎁 Khám phá thêm: <a href="https://lyuongruouvang.com/bo-qua-tang" style="color:#8b0000; font-weight:bold;">Gợi ý Bộ Quà Tặng</a>
 - Khuyến mãi: <br>🏷️ Khám phá thêm: <a href="https://lyuongruouvang.com/khuyen-mai-ly-vang-coc-nuoc-binh-hoa" style="color:#8b0000; font-weight:bold;">Chương Trình Khuyến Mãi</a>
 - Mặc định: <br>🍷 Khám phá thêm: <a href="https://lyuongruouvang.com/" style="color:#8b0000; font-weight:bold;">Sản Phẩm Pha Lê Rona & Bohemia</a>
-
 # MANDATORY CLOSING STATEMENT
 <br><a href="https://zalo.me/0963111234" style="color:#0068ff; font-weight:bold;">👉 Cần tư vấn kỹ hơn, anh/chị nhắn Zalo cho Em nhé!</a>
-
 # PRODUCT DATA
 ${JSON.stringify(products)}`
         },
