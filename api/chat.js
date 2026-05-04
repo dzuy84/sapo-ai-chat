@@ -1,12 +1,16 @@
 const { OpenAI } = require("openai");
 
-// ===== 1. OPENAI SINGLETON & CACHE =====
+// Vercel Pro: tăng timeout cho OpenAI call
+module.exports.config = { maxDuration: 30 };
+
+// ===== 1. OPENAI SINGLETON =====
 let openai;
 function getOpenAI() {
   if (!openai) openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   return openai;
 }
 
+// ===== 2. CACHE SẢN PHẨM (in-memory, reset khi cold start) =====
 let cachedProducts = [];
 let lastFetch = 0;
 
@@ -16,7 +20,7 @@ async function fetchProducts() {
     const timeout = setTimeout(() => controller.abort(), 3000);
 
     const auth = Buffer.from(
-      `${process.env.SAPO_API_KEY || ""}:${process.env.SAPO_API_SECRET || ""}`
+      `${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`
     ).toString("base64");
 
     const sapoRes = await fetch(
@@ -53,7 +57,7 @@ async function getProductsCached() {
   return cachedProducts;
 }
 
-// ===== 2. LỌC SẢN PHẨM TRÁNH TỐN TOKEN =====
+// ===== 3. LỌC SẢN PHẨM =====
 function findRelevantProducts(message, products) {
   if (!Array.isArray(products)) return [];
 
@@ -90,13 +94,36 @@ function findRelevantProducts(message, products) {
     .slice(0, 5);
 }
 
-// ===== 3. MAIN HANDLER =====
+// ===== 4. RATE LIMIT (in-memory, best-effort trên serverless) =====
+const ipHits = new Map();
+
+function checkRateLimit(ip) {
+  // Tránh Map phình to khi có quá nhiều IP
+  if (ipHits.size > 10000) ipHits.clear();
+
+  const hits = (ipHits.get(ip) || 0) + 1;
+  ipHits.set(ip, hits);
+  setTimeout(() => ipHits.delete(ip), 60000);
+
+  return hits > 15;
+}
+
+// ===== 5. MAIN HANDLER =====
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "OPTIONS, POST");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ reply: "Method not allowed" });
+
+  // Kiểm tra ENV đủ trước khi chạy
+  const requiredEnv = ["OPENAI_API_KEY", "SAPO_API_KEY", "SAPO_API_SECRET", "SAPO_STORE_ALIAS"];
+  for (const key of requiredEnv) {
+    if (!process.env[key]) {
+      console.error(`Missing ENV: ${key}`);
+      return res.status(500).json({ reply: "Hệ thống đang bảo trì." });
+    }
+  }
 
   try {
     let { message, context } = req.body || {};
@@ -105,10 +132,14 @@ module.exports = async (req, res) => {
       return res.status(400).json({ reply: "Tin nhắn không hợp lệ." });
     }
 
-    // Trim + giới hạn độ dài — dùng biến này xuyên suốt
     message = message.trim().slice(0, 500);
 
+    // Rate limit
     const ip = req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "Unknown";
+    if (checkRateLimit(ip)) {
+      return res.status(429).json({ reply: "Bạn thao tác nhanh quá. Thử lại sau 1 phút nhé!" });
+    }
+
     console.log(`[CHAT] IP: ${ip} | Trang: ${context || "Trang chủ"} | Hỏi: ${message.slice(0, 100)}`);
 
     const allProducts = await getProductsCached();
@@ -127,7 +158,7 @@ module.exports = async (req, res) => {
 Bạn là chuyên gia tư vấn pha lê cao cấp của THIÊN ÂN, chuyên các dòng RONA và Bohemia. Phong cách chuyên nghiệp, tinh tế, tập trung chốt đơn hàng.
 
 # BỐI CẢNH
-Khách đang xem trang: "${typeof context === "string" ? context : "Trang chủ"}".
+Khách đang xem trang: "${typeof context === "string" ? context.slice(0, 100) : "Trang chủ"}".
 
 # LOGIC XỬ LÝ
 ## 1. Khách hỏi SẢN PHẨM CỤ THỂ
@@ -156,14 +187,16 @@ Khách đang xem trang: "${typeof context === "string" ? context : "Trang chủ"
 # DỮ LIỆU SẢN PHẨM PHÙ HỢP
 ${JSON.stringify(relevantProducts)}`,
         },
-        // Dùng message (đã trim + slice) — nhất quán, không cần safeMessage riêng
-        { role: "user", content: message },
+        // Bọc triple-quote để giảm nguy cơ prompt injection
+        { role: "user", content: `Yêu cầu của khách hàng: """${message}"""` },
       ],
     });
 
+    console.log("Token usage:", completion.usage);
+
     return res.status(200).json({ reply: completion.choices[0].message.content });
   } catch (err) {
-    // Log đầy đủ server-side để debug, KHÔNG expose ra client
+    // Log đầy đủ server-side, KHÔNG expose ra client
     console.error("Handler error:", err);
 
     return res.status(200).json({
