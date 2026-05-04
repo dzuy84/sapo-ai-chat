@@ -8,45 +8,49 @@ app.use(express.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-app.post('/chat', async (req, res) => {
+app.post('/api/chat', async (req, res) => {
   const { message, history = [], context = "" } = req.body;
   
   try {
     const sapoAlias = process.env.SAPO_STORE_ALIAS; 
     const sapoToken = process.env.SAPO_API_SECRET; 
 
-    // GỌI API SAPO TÌM SẢN PHẨM THEO TỪ KHÓA
+    // TÌM KIẾM SẢN PHẨM TRỰC TIẾP TỪ KHO SAPO
     const searchUrl = `https://${sapoAlias}.mysapo.net/admin/products.json?query=${encodeURIComponent(message)}&limit=5`;
     
     const sapoRes = await fetch(searchUrl, { 
-      headers: { "X-Sapo-Access-Token": sapoToken, "Content-Type": "application/json" } 
+      headers: { 
+        "X-Sapo-Access-Token": sapoToken, 
+        "Content-Type": "application/json" 
+      } 
     });
 
     const sapoData = await sapoRes.json();
     let productContext = "";
 
     if (sapoData.products && sapoData.products.length > 0) {
-      productContext = "DỮ LIỆU KHO RONA THẬT (DÙNG ĐỂ BÁO GIÁ):\\n" + sapoData.products.map(p => {
+      productContext = "DỮ LIỆU KHO HÀNG THẬT (DÙNG ĐỂ BÁO GIÁ):\\n" + sapoData.products.map(p => {
         const price = (p.variants && p.variants[0] && Number(p.variants[0].price) > 0) 
                       ? Number(p.variants[0].price).toLocaleString('vi-VN') + "đ" 
                       : "Liên hệ";
         return `- ${p.title}: ${price}. Link: https://lyuongruouvang.com/products/${p.handle}`;
       }).join("\\n");
     } else {
-      productContext = "Hiện tại không tìm thấy sản phẩm này trong kho nhanh.";
+      productContext = "Hiện tại không tìm thấy sản phẩm chính xác trong kho nhanh.";
     }
 
-    // THIẾT LẬP LỜI THOẠI HƯƠNG LAN
-    const finalSystemPrompt = `Bạn là Hương Lan - Chuyên gia tư vấn pha lê RONA.
-    NHIỆM VỤ: Tư vấn đẳng cấp về ly pha lê Bohemia và Rona.
+    // THIẾT LẬP TÍNH CÁCH SOMMELIER CHO HƯƠNG LAN
+    const finalSystemPrompt = `Bạn là Hương Lan - Chuyên gia tư vấn pha lê cao cấp tại lyuongruouvang.com.
+    NHIỆM VỤ: Tư vấn đẳng cấp về các dòng ly vang, bình thở pha lê Bohemia (Tiệp Khắc) và Rona (Slovakia).
     
     NGỮ CẢNH TRANG WEB KHÁCH ĐANG XEM: ${context}
-    DỮ LIỆU KHO HÀNG: ${productContext}
+    DỮ LIỆU KHO HÀNG SAPO: ${productContext}
     
-    QUY TẮC:
-    1. TUYỆT ĐỐI KHÔNG BỊA GIÁ. Chỉ dùng giá và link từ dữ liệu kho ở trên.
-    2. Nếu không có hàng, mời khách xem tại: https://lyuongruouvang.com/collections/all
-    3. Trả lời lịch sự, am hiểu sâu về rượu vang.`;
+    QUY TẮC SỐNG CÒN:
+    1. TUYỆT ĐỐI KHÔNG BỊA GIÁ. Chỉ dùng giá và link từ DỮ LIỆU KHO HÀNG bên trên.
+    2. Nếu không thấy sản phẩm khách yêu cầu, hãy mời khách tham khảo bộ sưu tập đầy đủ tại: https://lyuongruouvang.com/collections/all
+    3. Luôn giữ phong thái chuyên nghiệp, am hiểu sâu về văn hóa thưởng thức rượu vang.
+    4. Trình bày rõ ràng: Tên sản phẩm - Giá - Link mua hàng.`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -58,13 +62,12 @@ app.post('/chat', async (req, res) => {
       temperature: 0.7
     });
 
-    res.json({ reply: response.choices[0].message.content });
+    res.status(200).json({ reply: response.choices[0].message.content });
 
   } catch (error) { 
-    console.error("Lỗi:", error);
-    res.status(500).json({ reply: "Hương Lan đang kiểm tra lại kho, Duy chờ em tí nhé!" }); 
+    console.error("Lỗi Vercel:", error);
+    res.status(500).json({ reply: "Duy ơi, Hương Lan đang gặp chút sự cố kết nối kho hàng, sếp chờ em 1 phút nhé!" }); 
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server RONA chạy tại port ${PORT}`));
+module.exports = app;
