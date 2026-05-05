@@ -138,91 +138,79 @@ function sanitizeHistory(rawHistory) {
     .slice(-20);
 }
 
-async function callOpenAIWithRetry(aiClient, messages, maxRetries) {
-  maxRetries = maxRetries || 3;
-  var lastError;
-  for (var attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const completion = await aiClient.chat.completions.create({
-        model: "gpt-4o-mini",
-        temperature: 0.5,
-        max_tokens: 600,
-        messages: messages,
-      });
-      const choice = completion.choices[0];
-      if (choice.finish_reason !== "stop") {
-        lastError = new Error("Incomplete: " + choice.finish_reason);
-        if (attempt < maxRetries) {
-          await new Promise(function(r) { setTimeout(r, 300 * attempt); });
-          continue;
-        }
-      }
-      console.log("Token usage:", completion.usage);
-      return choice.message.content;
-    } catch (err) {
-      lastError = err;
-      console.error("Attempt " + attempt + " failed:", err.message);
-      if (err.status && err.status >= 400 && err.status < 500) throw err;
-      if (attempt < maxRetries) {
-        await new Promise(function(r) { setTimeout(r, 500 * attempt); });
-      }
-    }
-  }
-  throw lastError;
-}
-
-module.exports = async function(req, res) {
+module.exports.default = async function handler(req, res) {
+  // CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "OPTIONS, POST");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ reply: "Method not allowed" });
 
-  const requiredEnv = ["OPENAI_API_KEY", "SAPO_API_KEY", "SAPO_API_SECRET", "SAPO_STORE_ALIAS"];
-  for (var i = 0; i < requiredEnv.length; i++) {
-    if (!process.env[requiredEnv[i]]) {
-      console.error("Missing ENV: " + requiredEnv[i]);
-      return res.status(500).json({ reply: "He thong dang bao tri." });
-    }
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
   }
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  // Rate limit
+  const ip =
+    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+    req.socket?.remoteAddress ||
+    "unknown";
+  if (checkRateLimit(ip)) {
+    return res.status(429).json({ error: "Too many requests" });
+  }
+
+  let body = req.body;
+  if (typeof body === "string") {
+    try { body = JSON.parse(body); } catch { body = {}; }
+  }
+
+  const message = String(body?.message || "").trim().slice(0, 500);
+  const context = String(body?.context || "").trim().slice(0, 300);
+  const history = sanitizeHistory(body?.history);
+
+  if (!message) {
+    return res.status(400).json({ error: "Missing message" });
+  }
+
+  const products = await getProductsCached();
+  const relevantProducts = findRelevantProducts(message, products);
+  const systemPrompt = buildSystemPrompt(context, relevantProducts);
+
+  const messages = [
+    { role: "system", content: systemPrompt },
+    ...history,
+    { role: "user", content: message },
+  ];
+
+  // ---- STREAMING RESPONSE ----
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
 
   try {
-    var body = req.body || {};
-    var message = body.message;
-    var context = body.context;
-    var history = body.history;
-
-    if (!message || typeof message !== "string" || message.trim() === "") {
-      return res.status(400).json({ reply: "Tin nhan khong hop le." });
-    }
-
-    message = message.trim().slice(0, 500);
-
-    const ip = req.headers["x-forwarded-for"] || (req.socket && req.socket.remoteAddress) || "Unknown";
-    if (checkRateLimit(ip)) {
-      return res.status(429).json({ reply: "Ban thao tac nhanh qua. Thu lai sau 1 phut nhe!" });
-    }
-
-    console.log("[CHAT] IP: " + ip + " | Hoi: " + message.slice(0, 100));
-
-    const allProducts = await getProductsCached();
-    const relevantProducts = findRelevantProducts(message, allProducts);
-    const aiClient = getOpenAI();
-    const cleanHistory = sanitizeHistory(history);
-
-    const messages = [
-      { role: "system", content: buildSystemPrompt(context, relevantProducts) },
-    ].concat(cleanHistory).concat([
-      { role: "user", content: "Yeu cau cua khach hang: \"\"\"" + message + "\"\"\"" },
-    ]);
-
-    const reply = await callOpenAIWithRetry(aiClient, messages, 3);
-    return res.status(200).json({ reply: reply });
-
-  } catch (err) {
-    console.error("Handler error:", err);
-    return res.status(200).json({
-      reply: "Da em dang ban chut xiu, anh/chi nhan Zalo Em tu van ngay nhe! <br><a href='https://zalo.me/0963111234' style='color:#0068ff;font-weight:bold;'>👉 Chat Zalo Em</a>",
+    const stream = await getOpenAI().chat.completions.create({
+      model: "gpt-4o-mini",
+      messages,
+      max_tokens: 800,
+      temperature: 0.7,
+      stream: true,
     });
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices?.[0]?.delta?.content;
+      if (delta) {
+        // SSE format: "data: ...\n\n"
+        res.write(`data: ${JSON.stringify({ delta })}\n\n`);
+      }
+    }
+
+    res.write("data: [DONE]\n\n");
+    res.end();
+  } catch (e) {
+    console.error("OpenAI stream error:", e.message);
+    res.write(`data: ${JSON.stringify({ error: "AI error" })}\n\n`);
+    res.end();
   }
 };
