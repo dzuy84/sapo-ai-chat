@@ -1,4 +1,4 @@
-Const { OpenAI } = require("openai");
+const { OpenAI } = require("openai");
 
 // Vercel Pro: tăng timeout cho OpenAI call
 module.exports.config = { maxDuration: 30 };
