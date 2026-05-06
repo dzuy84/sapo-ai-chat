@@ -2,45 +2,63 @@ const { OpenAI } = require("openai");
 
 module.exports.config = { maxDuration: 30 };
 
+// ===== OPENAI =====
 let openai;
 function getOpenAI() {
   if (!openai) openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   return openai;
 }
 
+// ===== CACHE =====
 let cachedProducts = [];
 let lastFetch = 0;
 
+// ===== BỎ DẤU TIẾNG VIỆT =====
+function normalize(str) {
+  return String(str || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+// ===== FETCH SAPO (CÓ PAGINATION) =====
 async function fetchProducts() {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-    const auth = Buffer.from(
-      `${process.env.SAPO_API_KEY}:${process.env.SAPO_API_SECRET}`
-    ).toString("base64");
-    const sapoRes = await fetch(
-      `https://${process.env.SAPO_STORE_ALIAS}.mysapo.net/admin/products.json?limit=250&fields=title,alias`,
-      {
-        headers: {
-          Authorization: `Basic ${auth}`,
-          "Content-Type": "application/json",
-        },
-        signal: controller.signal,
-      }
-    );
-    clearTimeout(timeout);
-    if (!sapoRes.ok) throw new Error(`Sapo HTTP ${sapoRes.status}`);
-    const data = await sapoRes.json();
-    return (data.products || []).map((p) => ({
-      name: p?.title || "",
-      url: `https://lyuongruouvang.com/products/${p?.alias || ""}`,
+    let all = [];
+
+    for (let page = 1; page <= 3; page++) { // tối đa 750 sản phẩm
+      const res = await fetch(
+        `https://${process.env.SAPO_STORE_ALIAS}.mysapo.net/admin/products.json?limit=250&page=${page}&fields=title,handle`,
+        {
+          headers: {
+            "X-Sapo-Access-Token": process.env.SAPO_API_SECRET,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!res.ok) throw new Error(`Sapo ${res.status}`);
+
+      const data = await res.json();
+      if (!data.products || data.products.length === 0) break;
+
+      all = all.concat(data.products);
+    }
+
+    console.log("TOTAL PRODUCTS:", all.length);
+
+    return all.map((p) => ({
+      name: p.title,
+      nameNorm: normalize(p.title),
+      url: `https://lyuongruouvang.com/products/${p.handle}`,
     }));
   } catch (e) {
-    console.error("Sapo fetch error:", e.message);
+    console.error("SAPO ERROR:", e.message);
     return [];
   }
 }
 
+// ===== CACHE 5 PHÚT =====
 async function getProductsCached() {
   if (Date.now() - lastFetch < 5 * 60 * 1000 && cachedProducts.length > 0) {
     return cachedProducts;
@@ -50,174 +68,179 @@ async function getProductsCached() {
   return cachedProducts;
 }
 
+// ===== SEARCH THÔNG MINH =====
 function findRelevantProducts(message, products) {
   if (!Array.isArray(products)) return [];
+
+  const msg = normalize(message);
+
   const stopwords = new Set([
     "mua","gia","bao","nhieu","cho","xem","cai","nay",
     "em","anh","chi","oi","nhe",
   ]);
-  const synonymMap = { whiskey: "whisky" };
-  const tokens = String(message || "")
-    .toLowerCase()
+
+  const tokens = msg
     .split(/\s+/)
-    .filter((t) => t.length > 1 && !stopwords.has(t))
-    .map((t) => synonymMap[t] || t);
+    .filter((t) => t.length > 1 && !stopwords.has(t));
+
   if (tokens.length === 0) return [];
+
   const scored = products.map((p) => {
     let score = 0;
-    const name = String(p?.name || "").toLowerCase();
-    tokens.forEach((t) => { if (name.includes(t)) score++; });
+
+    tokens.forEach((t) => {
+      if (p.nameNorm.includes(t)) score += 2;
+    });
+
+    if (p.nameNorm.includes(msg)) score += 5;
+
     return { ...p, score };
   });
+
   return scored
     .filter((p) => p.score > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
+    .slice(0, 8); // tăng lên 8 sản phẩm
 }
 
+// ===== RATE LIMIT =====
 const ipHits = new Map();
 function checkRateLimit(ip) {
   if (ipHits.size > 10000) ipHits.clear();
+
   const hits = (ipHits.get(ip) || 0) + 1;
   ipHits.set(ip, hits);
+
   setTimeout(() => ipHits.delete(ip), 60000);
-  return hits > 15;
+
+  return hits > 20;
 }
 
+// ===== PROMPT =====
 function buildSystemPrompt(context, relevantProducts) {
   return `
-# VAI TRO
-Ban la chuyen gia tu van pha le cao cap cua THIEN AN, chuyen cac dong RONA va Bohemia. Phong cach chuyen nghiep, tinh te, tap trung chot don hang. Tra loi NGAN GON toi da 3-4 cau.
+Bạn là chuyên gia tư vấn ly rượu vang cao cấp RONA & Bohemia.
 
-# BOI CANH
-Khach dang xem trang: "${typeof context === "string" ? context.slice(0, 100) : "Trang chu"}".
+Phong cách:
+- Nói tự nhiên, chuyên nghiệp
+- Ngắn gọn 3-4 câu
+- Tập trung chốt đơn
 
-# LOGIC XU LY
-## 1. Khach hoi SAN PHAM CU THE
-- Cung cap link san pham truc tiep tu DU LIEU SAN PHAM.
-- Form link: <a href="URL" style="color:#8b0000;font-weight:bold;text-decoration:underline;">Ten san pham</a>
-- Neu khong co: <a href="https://lyuongruouvang.com/search?query=KEYWORD" style="color:#8b0000;font-weight:bold;text-decoration:underline;">Xem ket qua cho "KEYWORD"</a>
-- Them 1 link danh muc.
+QUY TẮC:
+- Nếu có sản phẩm → PHẢI chèn link dạng:
+<a href="URL" style="color:#8b0000;font-weight:bold;text-decoration:underline;">Tên sản phẩm</a>
 
-## 2. Hoi CHUNG
-- Tra loi tu nhien, ngan gon. Them 1 link danh muc phu hop.
+- Nếu không có → dùng link tìm kiếm:
+<a href="https://lyuongruouvang.com/search?query=${context || ""}" style="color:#8b0000;font-weight:bold;">Xem sản phẩm</a>
 
-# DANH MUC (CHI CHON MOT)
-- Ly vang đỏ: <br>🍷 <a href="https://lyuongruouvang.com/ly-uong-vang-do" style="color:#8b0000;font-weight:bold;">Danh mục Ly Vang Đỏ</a>
-- Ly vang trắng: <br>🍷 <a href="https://lyuongruouvang.com/ly-vang-trang" style="color:#8b0000;font-weight:bold;">Danh mục Ly Vang Trắng</a>
-- Ly Champagne: <br>🥂 <a href="https://lyuongruouvang.com/ly-champagne-flute" style="color:#8b0000;font-weight:bold;">Ly Champagne Flute</a>
-- Ly Whiskey: <br>🥃 <a href="https://lyuongruouvang.com/ly-whiskey" style="color:#8b0000;font-weight:bold;">Danh mục Ly Whiskey</a>
-- Ly Brandy/Cognac: <br>🥃 <a href="https://lyuongruouvang.com/ly-brandy-cognac" style="color:#8b0000;font-weight:bold;">Ly Brandy & Cognac</a>
-- Cốc nước/Ly pha lê: <br>🥛 <a href="https://lyuongruouvang.com/ly-coc" style="color:#8b0000;font-weight:bold;">Bộ sưu tập Cốc nước Pha lê</a>
-- Bình chiết rượu (Decanter): <br>🏺 <a href="https://lyuongruouvang.com/binh-chiet-ruou" style="color:#8b0000;font-weight:bold;">Bình Chiết Rượu Decanter</a>
-- Bộ bình ly uống rượu: <br>🍾 <a href="https://lyuongruouvang.com/bo-binh-ruou" style="color:#8b0000;font-weight:bold;">Bộ Bình Ly Uống Rượu</a>
-- Ly mạ vàng: <br>✨ <a href="https://lyuongruouvang.com/ly-ruou-vang-ma-vang" style="color:#8b0000;font-weight:bold;">Bộ Sưu Tập Ly Pha Lê Mạ Vàng</a>
-- Mạ vàng đắp nổi/hoa văn: <br>⚜️ <a href="https://lyuongruouvang.com/ma-vang-dap-noi" style="color:#8b0000;font-weight:bold;">Pha Lê Mạ Vàng Đắp Nổi Cao Cấp</a>
-- Pha lê màu: <br>🌈 <a href="https://lyuongruouvang.com/pha-le-mau" style="color:#8b0000;font-weight:bold;">Bộ sưu tập Pha Lê Màu</a>
-- Bộ bình trà/nước: <br>🫖 <a href="https://lyuongruouvang.com/bo-binh-tra-nuoc" style="color:#8b0000;font-weight:bold;">Bộ Bình Trà & Bình Nước</a>
-- Bình hoa pha lê: <br>💐 <a href="https://lyuongruouvang.com/binh-bong" style="color:#8b0000;font-weight:bold;">Bình Hoa Pha Lê Cao Cấp</a>
-- Tô, Thố, Đĩa: <br>🍽️ <a href="https://lyuongruouvang.com/to-tho" style="color:#8b0000;font-weight:bold;">Tô, Thố, Đĩa Pha Lê</a>
-- Đèn chùm/Đèn trang trí: <br>💡 <a href="https://lyuongruouvang.com/den-chum" style="color:#8b0000;font-weight:bold;">Đèn Chùm Pha Lê Sang Trọng</a>
-- Bộ Quà tặng: <br>🎁 <a href="https://lyuongruouvang.com/bo-qua-tang" style="color:#8b0000;font-weight:bold;">Bộ Quà Tặng Pha Lê</a>
-- Mặc định: <br>💎 <a href="https://lyuongruouvang.com/" style="color:#8b0000;font-weight:bold;">Sản Phẩm Pha Lê RONA & Bohemia</a>
+DỮ LIỆU SẢN PHẨM:
+${JSON.stringify(relevantProducts)}
 
-# CAU KET BAT BUOC
-<br><a href="https://zalo.me/0963111234" style="color:#0068ff;font-weight:bold;">👉 Can tu van them, nhan Zalo cho Em nhe!</a>
+LUÔN thêm 1 link danh mục:
+🍷 <a href="https://lyuongruouvang.com/" style="color:#8b0000;font-weight:bold;">Xem thêm sản phẩm</a>
 
-# DU LIEU SAN PHAM
-${JSON.stringify(relevantProducts)}`;
+KẾT THÚC:
+<br><a href="https://zalo.me/0963111234" style="color:#0068ff;font-weight:bold;">👉 Chat Zalo để được tư vấn</a>
+`;
 }
 
+// ===== CLEAN HISTORY =====
 function sanitizeHistory(rawHistory) {
   if (!Array.isArray(rawHistory)) return [];
+
   return rawHistory
-    .filter((msg) =>
-      msg && typeof msg === "object" &&
-      (msg.role === "user" || msg.role === "assistant") &&
-      typeof msg.content === "string" &&
-      msg.content.trim().length > 0
+    .filter(
+      (msg) =>
+        msg &&
+        (msg.role === "user" || msg.role === "assistant") &&
+        typeof msg.content === "string"
     )
     .map((msg) => ({
       role: msg.role,
-      content: String(msg.content).trim().slice(0, 800),
+      content: msg.content.slice(0, 500),
     }))
-    .slice(-10);
+    .slice(-8);
 }
 
-module.exports = async function(req, res) {
+// ===== MAIN =====
+module.exports = async function (req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "OPTIONS, POST");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ reply: "Method not allowed" });
 
-  const requiredEnv = ["OPENAI_API_KEY","SAPO_API_KEY","SAPO_API_SECRET","SAPO_STORE_ALIAS"];
-  for (var i = 0; i < requiredEnv.length; i++) {
-    if (!process.env[requiredEnv[i]]) {
-      return res.status(500).json({ reply: "He thong dang bao tri." });
-    }
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST")
+    return res.status(405).json({ reply: "Method not allowed" });
 
   try {
-    var body = req.body || {};
-    var message = body.message;
-    var context = body.context;
-    var history = body.history;
+    const { message, history = [], context } = req.body;
 
-    if (!message || typeof message !== "string" || message.trim() === "") {
-      return res.status(400).json({ reply: "Tin nhan khong hop le." });
+    if (!message) {
+      return res.status(400).json({ reply: "Tin nhắn lỗi." });
     }
-    message = message.trim().slice(0, 500);
 
-    const ip = req.headers["x-forwarded-for"] || (req.socket && req.socket.remoteAddress) || "Unknown";
+    const ip =
+      req.headers["x-forwarded-for"] ||
+      req.socket?.remoteAddress ||
+      "unknown";
+
     if (checkRateLimit(ip)) {
-      return res.status(429).json({ reply: "Ban thao tac nhanh qua. Thu lai sau 1 phut!" });
+      return res.status(429).json({
+        reply: "Bạn thao tác nhanh quá, thử lại sau nhé!",
+      });
     }
 
-    console.log("[CHAT] " + ip + " | " + message.slice(0, 80));
+    console.log("USER:", message);
 
-    const allProducts = await getProductsCached();
-    const relevantProducts = findRelevantProducts(message, allProducts);
-    const aiClient = getOpenAI();
-    const cleanHistory = sanitizeHistory(history);
+    const products = await getProductsCached();
+    const relevantProducts = findRelevantProducts(message, products);
+
+    console.log("MATCH:", relevantProducts.length);
+
+    const ai = getOpenAI();
 
     const messages = [
       { role: "system", content: buildSystemPrompt(context, relevantProducts) },
-      ...cleanHistory,
+      ...sanitizeHistory(history),
       { role: "user", content: message },
     ];
 
-    // STREAMING
+    // ===== STREAM =====
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
 
-    const stream = await aiClient.chat.completions.create({
+    const stream = await ai.chat.completions.create({
       model: "gpt-4o-mini",
+      stream: true,
       temperature: 0.5,
       max_tokens: 300,
-      stream: true,
       messages,
     });
 
     for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta?.content || "";
-      if (delta) {
-        res.write(`data: ${JSON.stringify({ delta })}\n\n`);
+      const text = chunk.choices[0]?.delta?.content;
+      if (text) {
+        res.write(`data: ${JSON.stringify({ delta: text })}\n\n`);
       }
     }
 
-    res.write(`data: [DONE]\n\n`);
+    res.write("data: [DONE]\n\n");
     res.end();
 
   } catch (err) {
-    console.error("Handler error:", err);
+    console.error("ERROR:", err);
+
     if (!res.headersSent) {
       return res.status(200).json({
-        reply: "Da em dang ban, anh/chi nhan Zalo nhe! <br><a href='https://zalo.me/0963111234' style='color:#0068ff;font-weight:bold;'>👉 Chat Zalo</a>",
+        reply:
+          '👉 Hệ thống bận, nhắn Zalo giúp mình nhé! <br><a href="https://zalo.me/0963111234" style="color:#0068ff;font-weight:bold;">Chat Zalo</a>',
       });
     }
-    try { res.write(`data: [ERROR]\n\n`); res.end(); } catch(e) {}
+
+    try {
+      res.write("data: [ERROR]\n\n");
+      res.end();
+    } catch {}
   }
 };
