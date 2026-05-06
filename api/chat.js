@@ -108,7 +108,7 @@ Khach dang xem trang: "${typeof context === "string" ? context.slice(0, 100) : "
 - Ly Champagne: <br>🥂 <a href="https://lyuongruouvang.com/ly-champagne" style="color:#8b0000;font-weight:bold;">Ly Champagne Flute</a>
 - Binh Decanter: <br>🏺 <a href="https://lyuongruouvang.com/binh-chiet-ruou" style="color:#8b0000;font-weight:bold;">Binh Chiet Ruou Decanter</a>
 - Ly Whiskey: <br>🥃 <a href="https://lyuongruouvang.com/ly-whiskey" style="color:#8b0000;font-weight:bold;">Danh muc Ly Whiskey</a>
-- Ly nước, cốc nước: <br>🥂 <a href="https://lyuongruouvang.com/ly-champagne-flute" style="color:#8b0000;font-weight:bold;">Xem bộ sưu tập ly cốc đẹp tại đây</a>
+- Ly nước, cốc nước: <br>🥂 <a href="https://lyuongruouvang.com/ly-coc" style="color:#8b0000;font-weight:bold;">Xem bộ sưu tập ly cốc đẹp tại đây</a>
 - Binh hoa: <br>💐 <a href="https://lyuongruouvang.com/binh-bong" style="color:#8b0000;font-weight:bold;">Binh Hoa Pha Le</a>
 - Qua tang: <br>🎁 <a href="https://lyuongruouvang.com/bo-qua-tang" style="color:#8b0000;font-weight:bold;">Bo Qua Tang</a>
 - Mac dinh: <br>🍷 <a href="https://lyuongruouvang.com/" style="color:#8b0000;font-weight:bold;">San Pham Pha Le RONA & Bohemia</a>
