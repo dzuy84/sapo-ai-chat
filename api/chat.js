@@ -103,15 +103,23 @@ Khach dang xem trang: "${typeof context === "string" ? context.slice(0, 100) : "
 - Tra loi tu nhien, ngan gon. Them 1 link danh muc phu hop.
 
 # DANH MUC (CHI CHON MOT)
-- Ly vang do: <br>🍷 <a href="https://lyuongruouvang.com/ly-uong-vang-do" style="color:#8b0000;font-weight:bold;">Danh muc Ly Vang Do</a>
-- Ly vang trang: <br>🍷 <a href="https://lyuongruouvang.com/ly-vang-trang" style="color:#8b0000;font-weight:bold;">Danh muc Ly Vang Trang</a>
-- Ly Champagne: <br>🥂 <a href="https://lyuongruouvang.com/ly-champagne" style="color:#8b0000;font-weight:bold;">Ly Champagne Flute</a>
-- Binh Decanter: <br>🏺 <a href="https://lyuongruouvang.com/binh-chiet-ruou" style="color:#8b0000;font-weight:bold;">Binh Chiet Ruou Decanter</a>
-- Ly Whiskey: <br>🥃 <a href="https://lyuongruouvang.com/ly-whiskey" style="color:#8b0000;font-weight:bold;">Danh muc Ly Whiskey</a>
-- Ly nước, cốc nước: <br>🥂 <a href="https://lyuongruouvang.com/ly-coc" style="color:#8b0000;font-weight:bold;">Xem bộ sưu tập ly cốc đẹp tại đây</a>
-- Binh hoa: <br>💐 <a href="https://lyuongruouvang.com/binh-bong" style="color:#8b0000;font-weight:bold;">Binh Hoa Pha Le</a>
-- Qua tang: <br>🎁 <a href="https://lyuongruouvang.com/bo-qua-tang" style="color:#8b0000;font-weight:bold;">Bo Qua Tang</a>
-- Mac dinh: <br>🍷 <a href="https://lyuongruouvang.com/" style="color:#8b0000;font-weight:bold;">San Pham Pha Le RONA & Bohemia</a>
+- Ly vang đỏ: <br>🍷 <a href="https://lyuongruouvang.com/ly-uong-vang-do" style="color:#8b0000;font-weight:bold;">Danh mục Ly Vang Đỏ</a>
+- Ly vang trắng: <br>🍷 <a href="https://lyuongruouvang.com/ly-vang-trang" style="color:#8b0000;font-weight:bold;">Danh mục Ly Vang Trắng</a>
+- Ly Champagne: <br>🥂 <a href="https://lyuongruouvang.com/ly-champagne-flute" style="color:#8b0000;font-weight:bold;">Ly Champagne Flute</a>
+- Ly Whiskey: <br>🥃 <a href="https://lyuongruouvang.com/ly-whiskey" style="color:#8b0000;font-weight:bold;">Danh mục Ly Whiskey</a>
+- Ly Brandy/Cognac: <br>🥃 <a href="https://lyuongruouvang.com/ly-brandy-cognac" style="color:#8b0000;font-weight:bold;">Ly Brandy & Cognac</a>
+- Cốc nước/Ly pha lê: <br>🥛 <a href="https://lyuongruouvang.com/ly-coc" style="color:#8b0000;font-weight:bold;">Bộ sưu tập Cốc nước Pha lê</a>
+- Bình chiết rượu (Decanter): <br>🏺 <a href="https://lyuongruouvang.com/binh-chiet-ruou" style="color:#8b0000;font-weight:bold;">Bình Chiết Rượu Decanter</a>
+- Bộ bình ly uống rượu: <br>🍾 <a href="https://lyuongruouvang.com/bo-binh-ruou" style="color:#8b0000;font-weight:bold;">Bộ Bình Ly Uống Rượu</a>
+- Ly mạ vàng: <br>✨ <a href="https://lyuongruouvang.com/ly-ruou-vang-ma-vang" style="color:#8b0000;font-weight:bold;">Bộ Sưu Tập Ly Pha Lê Mạ Vàng</a>
+- Mạ vàng đắp nổi/hoa văn: <br>⚜️ <a href="https://lyuongruouvang.com/ma-vang-dap-noi" style="color:#8b0000;font-weight:bold;">Pha Lê Mạ Vàng Đắp Nổi Cao Cấp</a>
+- Pha lê màu: <br>🌈 <a href="https://lyuongruouvang.com/pha-le-mau" style="color:#8b0000;font-weight:bold;">Bộ sưu tập Pha Lê Màu</a>
+- Bộ bình trà/nước: <br>🫖 <a href="https://lyuongruouvang.com/bo-binh-tra-nuoc" style="color:#8b0000;font-weight:bold;">Bộ Bình Trà & Bình Nước</a>
+- Bình hoa pha lê: <br>💐 <a href="https://lyuongruouvang.com/binh-bong" style="color:#8b0000;font-weight:bold;">Bình Hoa Pha Lê Cao Cấp</a>
+- Tô, Thố, Đĩa: <br>🍽️ <a href="https://lyuongruouvang.com/to-tho" style="color:#8b0000;font-weight:bold;">Tô, Thố, Đĩa Pha Lê</a>
+- Đèn chùm/Đèn trang trí: <br>💡 <a href="https://lyuongruouvang.com/den-chum" style="color:#8b0000;font-weight:bold;">Đèn Chùm Pha Lê Sang Trọng</a>
+- Bộ Quà tặng: <br>🎁 <a href="https://lyuongruouvang.com/bo-qua-tang" style="color:#8b0000;font-weight:bold;">Bộ Quà Tặng Pha Lê</a>
+- Mặc định: <br>💎 <a href="https://lyuongruouvang.com/" style="color:#8b0000;font-weight:bold;">Sản Phẩm Pha Lê RONA & Bohemia</a>
 
 # CAU KET BAT BUOC
 <br><a href="https://zalo.me/0963111234" style="color:#0068ff;font-weight:bold;">👉 Can tu van them, nhan Zalo cho Em nhe!</a>
